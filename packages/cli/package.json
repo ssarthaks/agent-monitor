@@ -1,7 +1,7 @@
 {
   "name": "@agent-monitor/cli",
-  "version": "0.1.5",
-  "description": "CLI binary and orchestration runner for Agent Monitor",
+  "version": "0.2.0",
+  "description": "CLI binary and orchestration runner for Agent Monitor (V0.2 OBSERVE + CONTROL)",
   "type": "module",
   "bin": {
     "agent-monitor": "./dist/index.js",
@@ -11,7 +11,8 @@
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "files": [
-    "dist"
+    "dist",
+    "README.md"
   ],
   "publishConfig": {
     "access": "public"
@@ -25,9 +26,9 @@
     "dev": "tsx src/index.ts"
   },
   "dependencies": {
-    "@agent-monitor/agent": "^0.1.5",
-    "@agent-monitor/core": "^0.1.5",
-    "@agent-monitor/server": "^0.1.5",
+    "@agent-monitor/agent": "^0.2.0",
+    "@agent-monitor/core": "^0.2.0",
+    "@agent-monitor/server": "^0.2.0",
     "commander": "^12.1.0",
     "picocolors": "^1.1.1"
   },
