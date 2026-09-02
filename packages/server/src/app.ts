@@ -19,7 +19,7 @@ export class MonitorServer {
   private eventBus: EventBus;
 
   constructor(options: ServerOptions) {
-    this.port = options.port || 4040;
+    this.port = options.port ?? 4040;
     this.host = options.host || '127.0.0.1';
     this.repository = options.repository;
     this.eventBus = options.eventBus;
