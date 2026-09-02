@@ -1,4 +1,7 @@
 import http from 'node:http';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { URL } from 'node:url';
 import { AgentEvent, AgentSession } from '@agent-monitor/core';
 import { SessionRepository } from './db/repository.js';
@@ -9,6 +12,48 @@ export interface ServerOptions {
   host?: string;
   repository: SessionRepository;
   eventBus: EventBus;
+  publicDir?: string;
+}
+
+const MIME_TYPES: Record<string, string> = {
+  '.html': 'text/html; charset=utf-8',
+  '.js': 'application/javascript; charset=utf-8',
+  '.css': 'text/css; charset=utf-8',
+  '.json': 'application/json; charset=utf-8',
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.svg': 'image/svg+xml',
+  '.ico': 'image/x-icon',
+  '.woff': 'font/woff',
+  '.woff2': 'font/woff2',
+  '.txt': 'text/plain; charset=utf-8',
+};
+
+function findPublicDir(customDir?: string): string | null {
+  if (customDir && fs.existsSync(customDir)) {
+    return customDir;
+  }
+
+  const __filename = fileURLToPath(import.meta.url);
+  const __dirname = path.dirname(__filename);
+
+  const candidates = [
+    path.join(__dirname, '../public'),
+    path.join(__dirname, 'public'),
+    path.join(__dirname, '../../public'),
+    path.join(__dirname, '../../../apps/web/out'),
+    path.join(process.cwd(), 'apps/web/out'),
+    path.join(process.cwd(), 'packages/server/public'),
+  ];
+
+  for (const candidate of candidates) {
+    if (fs.existsSync(candidate) && fs.existsSync(path.join(candidate, 'index.html'))) {
+      return candidate;
+    }
+  }
+
+  return null;
 }
 
 export class MonitorServer {
@@ -17,12 +62,14 @@ export class MonitorServer {
   private host: string;
   private repository: SessionRepository;
   private eventBus: EventBus;
+  private publicDir: string | null;
 
   constructor(options: ServerOptions) {
     this.port = options.port ?? 4040;
     this.host = options.host || '127.0.0.1';
     this.repository = options.repository;
     this.eventBus = options.eventBus;
+    this.publicDir = findPublicDir(options.publicDir);
 
     this.server = http.createServer((req, res) => this.handleRequest(req, res));
   }
@@ -60,12 +107,14 @@ export class MonitorServer {
       const parsedUrl = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`);
       const pathname = parsedUrl.pathname;
 
+      // API: Health check
       if (pathname === '/health' && req.method === 'GET') {
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ status: 'ok', timestamp: Date.now() }));
         return;
       }
 
+      // API: List Sessions
       if (pathname === '/sessions' && req.method === 'GET') {
         const limit = Number(parsedUrl.searchParams.get('limit')) || 50;
         const sessions = this.repository.listSessions(limit);
@@ -74,6 +123,7 @@ export class MonitorServer {
         return;
       }
 
+      // API: Create Session
       if (pathname === '/sessions' && req.method === 'POST') {
         const body = await this.readJsonBody(req);
         const session: AgentSession = {
@@ -95,6 +145,7 @@ export class MonitorServer {
         return;
       }
 
+      // API: Session Details & Events
       const sessionMatch = pathname.match(/^\/sessions\/([^/]+)(\/events)?$/);
       if (sessionMatch) {
         const sessionId = sessionMatch[1];
@@ -147,6 +198,7 @@ export class MonitorServer {
         }
       }
 
+      // API: Real-time SSE Stream
       if (pathname === '/events/stream' && req.method === 'GET') {
         const sessionId = parsedUrl.searchParams.get('sessionId');
         if (!sessionId) {
@@ -158,7 +210,7 @@ export class MonitorServer {
         res.writeHead(200, {
           'Content-Type': 'text/event-stream',
           'Cache-Control': 'no-cache, no-transform',
-          'Connection': 'keep-alive',
+          Connection: 'keep-alive',
           'X-Accel-Buffering': 'no',
         });
 
@@ -190,6 +242,29 @@ export class MonitorServer {
         return;
       }
 
+      // Static UI File Serving (Serves Next.js exported Dashboard UI)
+      if (this.publicDir && req.method === 'GET') {
+        let filePath = path.join(this.publicDir, pathname === '/' ? 'index.html' : pathname);
+
+        if (!fs.existsSync(filePath) || fs.statSync(filePath).isDirectory()) {
+          filePath = path.join(this.publicDir, 'index.html');
+        }
+
+        if (fs.existsSync(filePath) && fs.statSync(filePath).isFile()) {
+          const ext = path.extname(filePath).toLowerCase();
+          const contentType = MIME_TYPES[ext] || 'application/octet-stream';
+          const fileContent = fs.readFileSync(filePath);
+
+          res.writeHead(200, {
+            'Content-Type': contentType,
+            'Cache-Control': ext === '.html' ? 'no-cache' : 'public, max-age=31536000, immutable',
+          });
+          res.end(fileContent);
+          return;
+        }
+      }
+
+      // Fallback API 404
       res.writeHead(404, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: 'Endpoint not found' }));
     } catch (err: any) {
@@ -210,7 +285,7 @@ export class MonitorServer {
       req.on('end', () => {
         try {
           resolve(body ? JSON.parse(body) : {});
-        } catch (err) {
+        } catch {
           reject(new Error('Invalid JSON'));
         }
       });

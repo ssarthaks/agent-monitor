@@ -3,11 +3,13 @@ node_modules/
 .pnp/
 .pnp.js
 
-# Build Outputs
+# Build Outputs & Generated Static Assets
 dist/
 build/
 .next/
 out/
+apps/web/out/
+packages/server/public/
 *.tsbuildinfo
 
 # SQLite Database & Monitoring Storage
@@ -22,6 +24,7 @@ out/
 .env.development.local
 .env.test.local
 .env.production.local
+!.env.sample
 *.pem
 id_rsa
 credentials.json
@@ -42,4 +45,3 @@ Thumbs.db
 .vscode/*
 !.vscode/settings.json
 !.vscode/extensions.json
-
