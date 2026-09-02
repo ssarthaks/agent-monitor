@@ -1,5 +1,6 @@
 import path from 'node:path';
 import fs from 'node:fs';
+import pc from 'picocolors';
 import {
   AgentEvent,
   AgentSession,
@@ -35,6 +36,7 @@ export interface RunCommandOptions {
   db?: string;
   model?: string;
   apiKey?: string;
+  keepAlive?: boolean;
 }
 
 function loadEnvFiles(workspaceRoot: string) {
@@ -230,6 +232,16 @@ export async function runAgentCommand(options: RunCommandOptions): Promise<void>
   });
 
   printSummaryBanner(summary, durationMs);
+
+  if (options.keepAlive) {
+    console.log(pc.bold(pc.cyan(`  ● Monitor server running at: ${pc.underline(serverUrl)}`)));
+    console.log(pc.bold(pc.cyan(`  ● Open Dashboard at:         ${pc.underline(`${dashboardUrl}${sessionId}`)}`)));
+    console.log(pc.dim('  Press Ctrl+C to stop the server.\n'));
+
+    await new Promise<void>((resolve) => {
+      process.on('SIGINT', () => resolve());
+    });
+  }
 
   await server.stop();
   db.close();
