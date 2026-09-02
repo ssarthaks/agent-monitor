@@ -8,6 +8,11 @@ import {
   FileCode,
   Layers,
   Code,
+  Copy,
+  Check,
+  FolderOpen,
+  FileText,
+  AlertCircle,
 } from 'lucide-react';
 
 interface InspectorProps {
@@ -15,15 +20,24 @@ interface InspectorProps {
 }
 
 export function Inspector({ action }: InspectorProps) {
-  const [viewRaw, setViewRaw] = useState(false);
+  const [activeTab, setActiveTab] = useState<'preview' | 'params' | 'risk' | 'raw'>('preview');
+  const [copiedSection, setCopiedSection] = useState<string | null>(null);
+
+  const handleCopy = (text: string, section: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedSection(section);
+    setTimeout(() => setCopiedSection(null), 2000);
+  };
 
   if (!action) {
     return (
-      <div className="flex flex-col items-center justify-center h-full bg-surface rounded-xl border border-surface-border p-8 text-center text-slate-500">
-        <Layers className="w-10 h-10 mb-3 text-slate-600 stroke-[1.5]" />
-        <p className="text-sm font-medium text-slate-400">Action Inspector</p>
-        <p className="text-xs text-slate-500 mt-1 max-w-xs">
-          Select any action from the activity timeline to inspect parameters, diffs, terminal output, and security risk details.
+      <div className="flex flex-col items-center justify-center h-full bg-white rounded border border-surface-border p-8 text-center text-charcoal-muted shadow-xs">
+        <div className="w-12 h-12 rounded bg-surface-muted flex items-center justify-center mb-3 border border-surface-border">
+          <Layers className="w-6 h-6 text-charcoal stroke-[1.5]" />
+        </div>
+        <p className="text-sm font-bold text-charcoal uppercase tracking-wide">Action Inspector</p>
+        <p className="text-xs text-charcoal-muted mt-1 max-w-xs leading-relaxed font-medium">
+          Select any action from the activity timeline to inspect file diffs, command executions, parameters, and risk details.
         </p>
       </div>
     );
@@ -32,169 +46,246 @@ export function Inspector({ action }: InspectorProps) {
   const renderDiff = (diffText?: string) => {
     if (!diffText) {
       return (
-        <div className="p-4 text-xs text-slate-500 font-mono">No diff available for this write.</div>
+        <div className="p-6 text-center text-xs text-charcoal-muted font-mono bg-surface-muted rounded border border-surface-border">
+          No diff available for this write operation.
+        </div>
       );
     }
 
     const lines = diffText.split('\n');
     return (
-      <div className="font-mono text-xs overflow-x-auto bg-[#060a12] p-3 rounded-lg border border-surface-border">
-        {lines.map((line, idx) => {
-          let lineClass = 'text-slate-400';
-          let bgClass = '';
-          if (line.startsWith('+') && !line.startsWith('+++')) {
-            lineClass = 'text-emerald-400';
-            bgClass = 'bg-emerald-500/10';
-          } else if (line.startsWith('-') && !line.startsWith('---')) {
-            lineClass = 'text-rose-400';
-            bgClass = 'bg-rose-500/10';
-          } else if (line.startsWith('@@')) {
-            lineClass = 'text-cyan-400 font-semibold';
-            bgClass = 'bg-cyan-500/10';
-          }
+      <div className="space-y-2">
+        <div className="flex items-center justify-between pb-1">
+          <div className="flex items-center gap-2 text-xs font-mono text-charcoal font-semibold">
+            <span className="text-emerald-700 font-bold">+{lines.filter(l => l.startsWith('+') && !l.startsWith('+++')).length}</span>
+            <span className="text-rose-700 font-bold">-{lines.filter(l => l.startsWith('-') && !l.startsWith('---')).length}</span>
+            <span className="text-charcoal-muted font-normal">lines changed</span>
+          </div>
+          <button
+            onClick={() => handleCopy(diffText, 'diff')}
+            className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-white hover:bg-surface-muted text-charcoal text-[11px] font-mono font-semibold border border-surface-border transition-colors shadow-xs"
+          >
+            {copiedSection === 'diff' ? <Check className="w-3 h-3 text-emerald-600" /> : <Copy className="w-3 h-3 text-charcoal-muted" />}
+            <span>Copy Diff</span>
+          </button>
+        </div>
 
-          return (
-            <div key={idx} className={`px-2 py-0.5 rounded-sm flex gap-3 ${bgClass}`}>
-              <span className="text-slate-600 select-none w-6 text-right shrink-0">{idx + 1}</span>
-              <span className={`${lineClass} whitespace-pre`}>{line}</span>
-            </div>
-          );
-        })}
+        <div className="font-mono text-xs overflow-x-auto bg-charcoal p-3.5 rounded border border-charcoal text-slate-200">
+          {lines.map((line, idx) => {
+            let lineClass = 'text-slate-300';
+            let bgClass = '';
+            if (line.startsWith('+') && !line.startsWith('+++')) {
+              lineClass = 'text-emerald-300 font-medium';
+              bgClass = 'bg-emerald-950/40 -mx-3.5 px-3.5 border-l-2 border-emerald-400';
+            } else if (line.startsWith('-') && !line.startsWith('---')) {
+              lineClass = 'text-rose-300 font-medium';
+              bgClass = 'bg-rose-950/40 -mx-3.5 px-3.5 border-l-2 border-rose-400';
+            } else if (line.startsWith('@@')) {
+              lineClass = 'text-tangerine font-semibold';
+              bgClass = 'bg-charcoal-surface -mx-3.5 px-3.5';
+            }
+
+            return (
+              <div key={idx} className={`py-0.5 flex gap-3 text-[11px] leading-5 ${bgClass}`}>
+                <span className="text-slate-600 select-none w-6 text-right shrink-0 font-mono">
+                  {idx + 1}
+                </span>
+                <span className={`${lineClass} whitespace-pre`}>{line}</span>
+              </div>
+            );
+          })}
+        </div>
       </div>
     );
   };
 
   const renderTerminal = (result?: any) => {
-    if (!result) return <div className="text-xs text-slate-500">No output recorded.</div>;
-    const stdout = result.stdout || '';
-    const stderr = result.stderr || '';
-    const exitCode = result.exitCode;
+    const stdout = result?.stdout || '';
+    const stderr = result?.stderr || '';
+    const exitCode = result?.exitCode;
+    const command = action.params.command || '';
 
     return (
       <div className="space-y-3 font-mono text-xs">
-        <div className="bg-surface-elevated px-3 py-2 rounded-lg border border-surface-border flex items-center justify-between">
-          <div className="flex items-center gap-2 text-cyan-300">
-            <span className="text-slate-500">$</span>
-            <span className="font-semibold">{action.params.command}</span>
+        {/* Command bar */}
+        <div className="bg-surface-muted px-3.5 py-2 rounded border border-surface-border flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2 text-charcoal font-bold truncate">
+            <span className="text-tangerine font-black">$</span>
+            <span className="truncate">{command}</span>
           </div>
-          <span
-            className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-              exitCode === 0
-                ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
-                : 'bg-rose-500/20 text-rose-400 border border-rose-500/30'
-            }`}
-          >
-            exit {exitCode !== null ? exitCode : 'null'}
-          </span>
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              onClick={() => handleCopy(command, 'cmd')}
+              className="p-1 rounded bg-white hover:bg-surface-muted text-charcoal border border-surface-border transition-colors shadow-xs"
+              title="Copy Command"
+            >
+              {copiedSection === 'cmd' ? <Check className="w-3 h-3 text-emerald-600" /> : <Copy className="w-3 h-3 text-charcoal-muted" />}
+            </button>
+            <span
+              className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${
+                exitCode === 0
+                  ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                  : 'bg-rose-100 text-rose-800 border border-rose-200'
+              }`}
+            >
+              exit {exitCode !== null && exitCode !== undefined ? exitCode : 'null'}
+            </span>
+          </div>
         </div>
 
-        <div className="bg-[#050811] p-3 rounded-lg border border-surface-border text-slate-300 overflow-x-auto max-h-80 whitespace-pre-wrap">
-          {stdout && <div className="text-emerald-300/90">{stdout}</div>}
-          {stderr && <div className="text-rose-400/90 mt-2">{stderr}</div>}
-          {!stdout && !stderr && <div className="text-slate-600 italic">No output received</div>}
+        {/* Output console */}
+        <div className="bg-charcoal p-3.5 rounded border border-charcoal text-slate-200 overflow-x-auto max-h-96 whitespace-pre-wrap font-mono text-xs">
+          {stdout && <div className="text-emerald-300 leading-relaxed">{stdout}</div>}
+          {stderr && <div className="text-rose-300 mt-2 leading-relaxed">{stderr}</div>}
+          {!stdout && !stderr && (
+            <div className="text-slate-500 italic">No output produced by this command.</div>
+          )}
         </div>
       </div>
     );
   };
 
   return (
-    <div className="flex flex-col h-full bg-surface rounded-xl border border-surface-border overflow-hidden">
-      <div className="px-5 py-3 border-b border-surface-border flex items-center justify-between bg-surface-elevated/40">
+    <div className="flex flex-col h-full bg-white rounded border border-surface-border overflow-hidden shadow-xs">
+      {/* Top action info bar */}
+      <div className="px-4 py-3 border-b border-surface-border flex flex-wrap items-center justify-between gap-3 bg-surface-muted">
         <div className="flex items-center gap-2.5">
-          <span className="text-xs font-bold uppercase tracking-wider text-slate-200">
+          <span className="text-xs font-black uppercase tracking-wider text-charcoal">
             {action.kind}
           </span>
-          <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-surface-elevated text-slate-400 border border-surface-border">
+          <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-white text-charcoal-muted border border-surface-border font-bold">
             {action.actionId}
           </span>
         </div>
 
-        <div className="flex items-center gap-2">
+        {/* Navigation Tabs */}
+        <div className="flex items-center gap-1 bg-white p-0.5 rounded border border-surface-border text-xs">
           <button
-            onClick={() => setViewRaw(!viewRaw)}
-            className={`px-2.5 py-1 rounded text-xs flex items-center gap-1.5 transition-colors ${
-              viewRaw
-                ? 'bg-cyan-500 text-slate-950 font-bold'
-                : 'bg-surface-elevated text-slate-300 hover:bg-surface-border'
+            onClick={() => setActiveTab('preview')}
+            className={`px-2.5 py-1 rounded text-[11px] font-bold uppercase tracking-wider transition-colors ${
+              activeTab === 'preview'
+                ? 'bg-charcoal text-white'
+                : 'text-charcoal-muted hover:text-charcoal hover:bg-surface-muted'
             }`}
           >
-            <Code className="w-3.5 h-3.5" />
-            {viewRaw ? 'Visual View' : 'Raw JSON'}
+            Output / Diff
+          </button>
+          <button
+            onClick={() => setActiveTab('params')}
+            className={`px-2.5 py-1 rounded text-[11px] font-bold uppercase tracking-wider transition-colors ${
+              activeTab === 'params'
+                ? 'bg-charcoal text-white'
+                : 'text-charcoal-muted hover:text-charcoal hover:bg-surface-muted'
+            }`}
+          >
+            Params
+          </button>
+          {action.risk && action.risk.flags.length > 0 && (
+            <button
+              onClick={() => setActiveTab('risk')}
+              className={`px-2.5 py-1 rounded text-[11px] font-bold uppercase tracking-wider transition-colors flex items-center gap-1 ${
+                activeTab === 'risk'
+                  ? 'bg-tangerine text-white'
+                  : 'text-tangerine hover:bg-tangerine-light'
+              }`}
+            >
+              <ShieldAlert className="w-3 h-3" />
+              <span>Risk ({action.risk.flags.length})</span>
+            </button>
+          )}
+          <button
+            onClick={() => setActiveTab('raw')}
+            className={`px-2.5 py-1 rounded text-[11px] font-bold uppercase tracking-wider transition-colors flex items-center gap-1 ${
+              activeTab === 'raw'
+                ? 'bg-charcoal text-white'
+                : 'text-charcoal-muted hover:text-charcoal hover:bg-surface-muted'
+            }`}
+          >
+            <Code className="w-3 h-3" />
+            <span>JSON</span>
           </button>
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-5 space-y-4">
-        {action.risk && action.risk.flags.length > 0 && (
-          <div className="p-3.5 rounded-lg bg-red-500/10 border border-red-500/20">
-            <div className="flex items-center gap-2 text-xs font-bold text-red-400 mb-2">
-              <ShieldAlert className="w-4 h-4 text-red-400" />
-              Security Risk Detected: {action.risk.level} ({action.risk.score}/100)
+      {/* Main Content Area */}
+      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+        {/* Risk Warning Alert */}
+        {action.risk && action.risk.flags.length > 0 && activeTab !== 'risk' && (
+          <div className="p-3 rounded bg-tangerine-light border border-tangerine-border flex items-center justify-between gap-3 text-xs">
+            <div className="flex items-center gap-2 font-semibold text-charcoal">
+              <ShieldAlert className="w-4 h-4 text-tangerine shrink-0" />
+              <span>
+                Risk Score: <strong>{action.risk.score}/100</strong> ({action.risk.level}) — {action.risk.flags[0].description}
+              </span>
             </div>
-            <div className="space-y-1.5">
-              {action.risk.flags.map((flag, idx) => (
-                <div key={idx} className="flex items-start gap-2 text-xs text-slate-300">
-                  <span className="font-mono text-red-400 font-semibold shrink-0">
-                    [{flag.ruleId}]
-                  </span>
-                  <span>{flag.description}</span>
-                  <span className="text-red-400/80 font-mono text-[10px] ml-auto shrink-0">
-                    +{flag.scoreImpact} pts
-                  </span>
-                </div>
-              ))}
-            </div>
+            <button
+              onClick={() => setActiveTab('risk')}
+              className="text-[11px] font-bold text-tangerine underline shrink-0 hover:text-tangerine-hover"
+            >
+              Inspect Risk
+            </button>
           </div>
         )}
 
+        {/* Blocked Action Banner */}
         {action.status === 'blocked' && (
-          <div className="p-3.5 rounded-lg bg-red-500/20 border border-red-500/40 text-red-200 text-xs">
-            <strong>ACTION BLOCKED BY SECURITY GUARDRAIL:</strong>
-            <p className="mt-1 font-mono text-red-300">{action.reason}</p>
+          <div className="p-3.5 rounded bg-rose-50 border border-rose-200 text-rose-900 text-xs flex items-start gap-2.5">
+            <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+            <div>
+              <strong className="font-bold uppercase tracking-wide">Action Blocked by Guardrail:</strong>
+              <p className="mt-1 font-mono text-rose-800 text-[11px]">{action.reason}</p>
+            </div>
           </div>
         )}
 
+        {/* Failed Action Banner */}
         {action.status === 'failed' && action.error && (
-          <div className="p-3.5 rounded-lg bg-rose-500/10 border border-rose-500/20 text-rose-300 text-xs">
-            <strong>Execution Error:</strong>
-            <p className="mt-1 font-mono">{action.error.message}</p>
+          <div className="p-3.5 rounded bg-rose-50 border border-rose-200 text-rose-900 text-xs flex items-start gap-2.5">
+            <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+            <div>
+              <strong className="font-bold">Execution Error:</strong>
+              <p className="mt-1 font-mono text-[11px] text-rose-800">{action.error.message}</p>
+            </div>
           </div>
         )}
 
-        {viewRaw ? (
-          <div className="font-mono text-xs bg-[#060a12] p-3 rounded-lg border border-surface-border text-slate-300 overflow-x-auto whitespace-pre-wrap">
-            {JSON.stringify(action, null, 2)}
-          </div>
-        ) : (
+        {/* TAB 1: Preview (Diff, Terminal, File Read, File List) */}
+        {activeTab === 'preview' && (
           <>
             {action.kind === 'file.write' && (
               <div>
-                <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2 flex items-center gap-2">
-                  <FileCode className="w-3.5 h-3.5 text-emerald-400" />
-                  File Diff: {action.params.path}
-                </h3>
+                <div className="flex items-center justify-between mb-2">
+                  <h3 className="text-xs font-bold text-charcoal uppercase tracking-wider flex items-center gap-1.5">
+                    <FileCode className="w-3.5 h-3.5 text-tangerine" />
+                    <span>File Modification Diff</span>
+                  </h3>
+                  <span className="text-[11px] font-mono font-semibold text-charcoal-muted">{action.params.path}</span>
+                </div>
                 {renderDiff(action.metadata?.diff || action.result?.diff)}
               </div>
             )}
 
             {action.kind === 'process.exec' && (
               <div>
-                <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2 flex items-center gap-2">
-                  <Terminal className="w-3.5 h-3.5 text-cyan-400" />
-                  Command Execution
+                <h3 className="text-xs font-bold text-charcoal uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                  <Terminal className="w-3.5 h-3.5 text-tangerine" />
+                  <span>Shell Command Execution</span>
                 </h3>
                 {renderTerminal(action.result)}
               </div>
             )}
 
             {action.kind === 'file.read' && (
-              <div className="space-y-3">
-                <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-2">
-                  <FileCode className="w-3.5 h-3.5 text-blue-400" />
-                  File Read: {action.params.path}
-                </h3>
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-xs font-bold text-charcoal uppercase tracking-wider flex items-center gap-1.5">
+                    <FileText className="w-3.5 h-3.5 text-charcoal" />
+                    <span>File Content Preview</span>
+                  </h3>
+                  <span className="text-[11px] font-mono font-semibold text-charcoal-muted">{action.params.path}</span>
+                </div>
                 {action.result && (
-                  <div className="font-mono text-xs bg-[#060a12] p-3 rounded-lg border border-surface-border text-slate-300 overflow-x-auto max-h-80 whitespace-pre-wrap">
+                  <div className="font-mono text-xs bg-charcoal p-3.5 rounded border border-charcoal text-slate-200 overflow-x-auto max-h-96 whitespace-pre-wrap leading-relaxed">
                     {action.result.content}
                   </div>
                 )}
@@ -202,16 +293,21 @@ export function Inspector({ action }: InspectorProps) {
             )}
 
             {action.kind === 'file.list' && (
-              <div className="space-y-3">
-                <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
-                  Directory Entries ({action.result?.totalCount || 0})
-                </h3>
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-xs font-bold text-charcoal uppercase tracking-wider flex items-center gap-1.5">
+                    <FolderOpen className="w-3.5 h-3.5 text-tangerine" />
+                    <span>Directory Entries ({action.result?.totalCount || 0})</span>
+                  </h3>
+                </div>
                 {action.result?.entries && (
-                  <div className="bg-[#060a12] p-2 rounded-lg border border-surface-border max-h-80 overflow-y-auto divide-y divide-surface-border/30 font-mono text-xs">
+                  <div className="bg-white rounded border border-surface-border max-h-80 overflow-y-auto divide-y divide-surface-border font-mono text-xs">
                     {action.result.entries.map((entry: any, i: number) => (
-                      <div key={i} className="py-1 px-2 flex items-center justify-between text-slate-300">
-                        <span>{entry.path}</span>
-                        <span className="text-[10px] text-slate-500 uppercase">{entry.type}</span>
+                      <div key={i} className="py-2 px-3 flex items-center justify-between text-charcoal hover:bg-surface-muted">
+                        <span className="font-medium text-charcoal">{entry.path}</span>
+                        <span className="text-[10px] text-charcoal-muted uppercase font-bold bg-surface-muted px-1.5 py-0.5 rounded border border-surface-border">
+                          {entry.type}
+                        </span>
                       </div>
                     ))}
                   </div>
@@ -219,6 +315,100 @@ export function Inspector({ action }: InspectorProps) {
               </div>
             )}
           </>
+        )}
+
+        {/* TAB 2: Parameters & Result */}
+        {activeTab === 'params' && (
+          <div className="space-y-4">
+            <div>
+              <h4 className="text-xs font-bold text-charcoal uppercase tracking-wider mb-1.5">
+                Input Parameters
+              </h4>
+              <pre className="font-mono text-xs bg-charcoal p-3.5 rounded border border-charcoal text-slate-200 overflow-x-auto">
+                {JSON.stringify(action.params, null, 2)}
+              </pre>
+            </div>
+
+            {action.result && (
+              <div>
+                <h4 className="text-xs font-bold text-charcoal uppercase tracking-wider mb-1.5">
+                  Execution Result
+                </h4>
+                <pre className="font-mono text-xs bg-charcoal p-3.5 rounded border border-charcoal text-emerald-300 overflow-x-auto">
+                  {JSON.stringify(action.result, null, 2)}
+                </pre>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* TAB 3: Security Risk Details */}
+        {activeTab === 'risk' && action.risk && (
+          <div className="space-y-4">
+            <div className="p-4 rounded bg-surface-muted border border-surface-border flex items-center justify-between">
+              <div>
+                <span className="text-xs font-bold text-charcoal-muted uppercase tracking-wider">Overall Risk Assessment</span>
+                <p className="text-2xl font-black text-charcoal font-mono mt-0.5">
+                  {action.risk.score} / 100
+                </p>
+              </div>
+              <span
+                className={`px-3 py-1 rounded text-xs font-black uppercase tracking-wider ${
+                  action.risk.level === 'CRITICAL'
+                    ? 'bg-rose-100 text-rose-800 border border-rose-200'
+                    : action.risk.level === 'HIGH'
+                    ? 'bg-tangerine-light text-tangerine border border-tangerine-border'
+                    : 'bg-amber-100 text-amber-800 border border-amber-200'
+                }`}
+              >
+                {action.risk.level}
+              </span>
+            </div>
+
+            <div className="space-y-2">
+              <h4 className="text-xs font-bold text-charcoal uppercase tracking-wider">
+                Triggered Rules ({action.risk.flags.length})
+              </h4>
+              {action.risk.flags.map((flag, idx) => (
+                <div
+                  key={idx}
+                  className="p-3.5 rounded bg-white border border-surface-border flex items-start justify-between gap-3 text-xs shadow-xs"
+                >
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono text-tangerine font-bold">[{flag.ruleId}]</span>
+                      <span className="font-bold text-charcoal">{flag.description}</span>
+                    </div>
+                    <p className="text-[11px] text-charcoal-muted mt-1 font-medium">Severity: {flag.severity}</p>
+                  </div>
+                  <span className="px-2 py-0.5 rounded font-mono font-black text-[11px] text-tangerine bg-tangerine-light border border-tangerine-border shrink-0">
+                    +{flag.scoreImpact} PTS
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* TAB 4: Raw Event JSON */}
+        {activeTab === 'raw' && (
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-charcoal uppercase tracking-wider">
+                Raw Event JSON
+              </span>
+              <button
+                onClick={() => handleCopy(JSON.stringify(action, null, 2), 'raw')}
+                className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-white hover:bg-surface-muted text-charcoal text-[11px] font-mono font-bold border border-surface-border transition-colors shadow-xs"
+              >
+                {copiedSection === 'raw' ? <Check className="w-3 h-3 text-emerald-600" /> : <Copy className="w-3 h-3 text-charcoal-muted" />}
+                <span>Copy JSON</span>
+              </button>
+            </div>
+            <pre className="font-mono text-xs bg-charcoal p-3.5 rounded border border-charcoal text-slate-200 overflow-x-auto whitespace-pre-wrap leading-relaxed">
+              {JSON.stringify(action, null, 2)}
+            </pre>
+          </div>
         )}
       </div>
     </div>

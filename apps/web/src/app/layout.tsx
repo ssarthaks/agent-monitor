@@ -2,8 +2,8 @@ import type { Metadata } from 'next';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'Agent Monitor — DevTools for AI Agents',
-  description: 'Real-time observability, timeline, and risk control plane for AI agents',
+  title: 'Agent Monitor — Activity Monitor & Control Plane for AI Agents',
+  description: 'Pure, real-time observability, action timeline, diff inspection, and deterministic risk control plane for AI agents',
 };
 
 export default function RootLayout({
@@ -12,8 +12,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" className="dark">
-      <body className="bg-[#090d16] text-slate-100 min-h-screen antialiased selection:bg-cyan-500/30 selection:text-cyan-200">
+    <html lang="en">
+      <body className="bg-white text-charcoal min-h-screen antialiased">
         {children}
       </body>
     </html>
