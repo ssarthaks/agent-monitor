@@ -1,12 +1,11 @@
 {
   "name": "@agent-monitor/cli",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "CLI binary and orchestration runner for Agent Monitor (V0.2 OBSERVE + CONTROL)",
   "type": "module",
   "bin": {
     "agent-monitor": "./dist/index.js",
-    "agent-monitor-cli": "./dist/index.js",
-    "@agent-monitor/cli": "./dist/index.js"
+    "agent-monitor-cli": "./dist/index.js"
   },
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -26,9 +25,9 @@
     "dev": "tsx src/index.ts"
   },
   "dependencies": {
-    "@agent-monitor/agent": "^0.2.0",
-    "@agent-monitor/core": "^0.2.0",
-    "@agent-monitor/server": "^0.2.0",
+    "@agent-monitor/agent": "^0.2.1",
+    "@agent-monitor/core": "^0.2.1",
+    "@agent-monitor/server": "^0.2.1",
     "commander": "^12.1.0",
     "picocolors": "^1.1.1"
   },

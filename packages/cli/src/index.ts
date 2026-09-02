@@ -17,7 +17,7 @@ program
   .description(
     "Agent Monitor — Activity Monitor & Deterministic Policy Gate for AI Agents (V0.2 OBSERVE + CONTROL)",
   )
-  .version("0.2.0");
+  .version("0.2.1");
 
 // 1. Run Agent Task with Policy Monitoring
 program

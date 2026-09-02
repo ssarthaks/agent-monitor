@@ -23,7 +23,7 @@ export function printStartupBanner(
       "  " +
       pc.bold(pc.white("AGENT MONITOR")) +
       " " +
-      pc.dim("v0.2.0 — Policy Enforcement & Human Approval") +
+      pc.dim("v0.2.1 — Policy Enforcement & Human Approval") +
       "    " +
       pc.bold(pc.cyan("║")),
   );
