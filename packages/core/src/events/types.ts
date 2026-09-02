@@ -1,10 +1,14 @@
 import { ActionCategory, ActionKind } from '../actions/types.js';
 import { RiskAssessment } from '../risk/types.js';
+import { PolicyDecision } from '../policy/types.js';
 
 export type EventType =
   | 'session.started'
   | 'session.ended'
   | 'agent.message'
+  | 'policy.evaluated'
+  | 'approval.requested'
+  | 'approval.resolved'
   | 'action.started'
   | 'action.completed'
   | 'action.failed'
@@ -45,6 +49,35 @@ export interface SessionEndedEvent extends BaseEvent {
 export interface AgentMessageEvent extends BaseEvent {
   type: 'agent.message';
   content: string; // Visible text emitted by the agent
+}
+
+export interface PolicyEvaluatedEvent extends BaseEvent {
+  type: 'policy.evaluated';
+  actionId: string;
+  decision: PolicyDecision;
+  matchedPolicies: string[];
+  specificity: number;
+  reason: string;
+}
+
+export interface ApprovalRequestedEvent extends BaseEvent {
+  type: 'approval.requested';
+  approvalId: string;
+  actionId: string;
+  actionKind: ActionKind;
+  category: ActionCategory;
+  params: Record<string, any>;
+  risk: RiskAssessment;
+  reason: string;
+  matchedPolicies: string[];
+}
+
+export interface ApprovalResolvedEvent extends BaseEvent {
+  type: 'approval.resolved';
+  approvalId: string;
+  actionId: string;
+  decision: 'approved' | 'denied' | 'expired';
+  resolvedBy?: string | null;
 }
 
 export interface ActionStartedEvent extends BaseEvent {
@@ -95,12 +128,20 @@ export interface ActionBlockedEvent extends BaseEvent {
   params: Record<string, unknown>;
   reason: string;
   risk: RiskAssessment;
+  policy?: {
+    decision: PolicyDecision;
+    matchedPolicies: string[];
+    reason: string;
+  };
 }
 
 export type AgentEvent =
   | SessionStartedEvent
   | SessionEndedEvent
   | AgentMessageEvent
+  | PolicyEvaluatedEvent
+  | ApprovalRequestedEvent
+  | ApprovalResolvedEvent
   | ActionStartedEvent
   | ActionCompletedEvent
   | ActionFailedEvent

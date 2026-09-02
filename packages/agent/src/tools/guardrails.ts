@@ -14,7 +14,7 @@ export function resolveSafeWorkspacePath(
   workspaceRoot: string
 ): { safePath: string; isOutsideWorkspace: boolean; reason?: string } {
   const normalizedRoot = path.resolve(workspaceRoot);
-  
+
   // Resolve target against workspace root
   let resolvedTarget = path.isAbsolute(targetPath)
     ? path.resolve(targetPath)
@@ -32,31 +32,33 @@ export function resolveSafeWorkspacePath(
     };
   }
 
-  // Check symlinks for existing path or nearest existing ancestor
-  try {
-    let currentCheck = resolvedTarget;
-    while (!fs.existsSync(currentCheck) && currentCheck !== path.dirname(currentCheck)) {
-      currentCheck = path.dirname(currentCheck);
-    }
-
-    if (fs.existsSync(currentCheck)) {
-      const realExisting = fs.realpathSync(currentCheck);
-      const realRoot = fs.existsSync(normalizedRoot) ? fs.realpathSync(normalizedRoot) : normalizedRoot;
-      const relReal = path.relative(realRoot, realExisting);
-      if (relReal.startsWith('..') || path.isAbsolute(relReal)) {
-        return {
-          safePath: resolvedTarget,
-          isOutsideWorkspace: true,
-          reason: `Symlink target '${realExisting}' points outside workspace root '${realRoot}'`,
-        };
+  // Check symlinks only if workspaceRoot exists on physical filesystem
+  if (fs.existsSync(normalizedRoot)) {
+    try {
+      let currentCheck = resolvedTarget;
+      while (!fs.existsSync(currentCheck) && currentCheck !== path.dirname(currentCheck)) {
+        currentCheck = path.dirname(currentCheck);
       }
+
+      if (fs.existsSync(currentCheck)) {
+        const realExisting = fs.realpathSync(currentCheck);
+        const realRoot = fs.realpathSync(normalizedRoot);
+        const relReal = path.relative(realRoot, realExisting);
+        if (relReal.startsWith('..') || path.isAbsolute(relReal)) {
+          return {
+            safePath: resolvedTarget,
+            isOutsideWorkspace: true,
+            reason: `Symlink target '${realExisting}' points outside workspace root '${realRoot}'`,
+          };
+        }
+      }
+    } catch (err: any) {
+      return {
+        safePath: resolvedTarget,
+        isOutsideWorkspace: true,
+        reason: `Could not verify real path: ${err.message}`,
+      };
     }
-  } catch (err: any) {
-    return {
-      safePath: resolvedTarget,
-      isOutsideWorkspace: true,
-      reason: `Could not verify real path: ${err.message}`,
-    };
   }
 
   return {

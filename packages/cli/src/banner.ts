@@ -3,7 +3,7 @@ import { AgentEvent, AgentSession, SessionEndedEvent } from '@agent-monitor/core
 
 export function printStartupBanner(session: AgentSession, serverUrl: string, dashboardUrl: string): void {
   console.log('\n' + pc.bold(pc.cyan('╔════════════════════════════════════════════════════════════════════╗')));
-  console.log(pc.bold(pc.cyan('║')) + '  ' + pc.bold(pc.white('AGENT MONITOR')) + ' ' + pc.dim('v0.1.0 — Activity Monitor for AI Agents') + '       ' + pc.bold(pc.cyan('║')));
+  console.log(pc.bold(pc.cyan('║')) + '  ' + pc.bold(pc.white('AGENT MONITOR')) + ' ' + pc.dim('v0.2.0 — Policy Enforcement & Human Approval') + '    ' + pc.bold(pc.cyan('║')));
   console.log(pc.bold(pc.cyan('╚════════════════════════════════════════════════════════════════════╝')));
   console.log();
   console.log(`  ${pc.bold('Agent:')}       ${pc.green(session.agentName)} (${session.model})`);
@@ -13,8 +13,7 @@ export function printStartupBanner(session: AgentSession, serverUrl: string, das
   console.log(`  ${pc.bold('Server API:')}  ${pc.underline(serverUrl)}`);
   console.log(`  ${pc.bold('Dashboard:')}   ${pc.bold(pc.cyan(dashboardUrl))}`);
   console.log();
-  console.log(pc.yellow('  ⚠️  NOTICE: Agent Monitor V0.1 provides activity monitoring & guardrails.'));
-  console.log(pc.yellow('     Host shell command execution is NOT an OS-level sandbox.'));
+  console.log(pc.yellow('  🛡️  POLICY ENGINE ACTIVE: V0.2 deterministic policy gates enforce ALLOW, DENY & ASK.'));
   console.log();
   console.log(pc.bold(pc.dim('─── Live Action Stream ───────────────────────────────────────────────')));
 }
@@ -25,8 +24,39 @@ export function printLiveEvent(event: AgentEvent): void {
   switch (event.type) {
     case 'agent.message':
       console.log(`\n${pc.dim(timeStr)} ${pc.bold(pc.magenta('💬 Agent Message:'))}`);
-      console.log(pc.gray(event.content.trim().split('\n').map(l => `   ${l}`).join('\n')));
+      console.log(pc.gray(event.content.trim().split('\n').map((l) => `   ${l}`).join('\n')));
       break;
+
+    case 'policy.evaluated': {
+      let badge = pc.green('ALLOW');
+      if (event.decision === 'DENY') badge = pc.red('DENY');
+      if (event.decision === 'ASK') badge = pc.yellow('ASK (Approval Required)');
+      console.log(
+        `${pc.dim(timeStr)} ${pc.blue('⚖️ ')} ${pc.bold('policy.evaluated')} ${badge} ${pc.dim(`[rules: ${event.matchedPolicies.join(', ') || 'default'}, spec: ${event.specificity}]`)}`
+      );
+      break;
+    }
+
+    case 'approval.requested': {
+      const target = getActionTarget(event.actionKind, event.params);
+      console.log(
+        `${pc.dim(timeStr)} ${pc.bgYellow(pc.black(pc.bold(' ⚠️  WAITING FOR APPROVAL ')))} ${pc.bold(event.actionKind.padEnd(12))} ${target} ${formatRiskBadge(event.risk.level, event.risk.score)}`
+      );
+      break;
+    }
+
+    case 'approval.resolved': {
+      const badge =
+        event.decision === 'approved'
+          ? pc.bgGreen(pc.black(pc.bold(' ✓ APPROVED ')))
+          : event.decision === 'expired'
+          ? pc.bgRed(pc.white(pc.bold(' ⌛ EXPIRED ')))
+          : pc.bgRed(pc.white(pc.bold(' ⛔ DENIED ')));
+      console.log(
+        `${pc.dim(timeStr)} ${badge} ${pc.dim(`[resolved by: ${event.resolvedBy || 'user'}]`)}`
+      );
+      break;
+    }
 
     case 'action.started': {
       const riskBadge = formatRiskBadge(event.risk.level, event.risk.score);
@@ -66,7 +96,10 @@ export function printLiveEvent(event: AgentEvent): void {
   }
 }
 
-export function printSummaryBanner(summary: SessionEndedEvent['summary'], durationMs: number): void {
+export function printSummaryBanner(
+  summary: SessionEndedEvent['summary'] & { approvedCount?: number; blockedCount?: number },
+  durationMs: number
+): void {
   const durSec = (durationMs / 1000).toFixed(1);
   const riskColor =
     summary.overallRiskScore >= 60 ? pc.red : summary.overallRiskScore >= 30 ? pc.yellow : pc.green;
@@ -79,6 +112,12 @@ export function printSummaryBanner(summary: SessionEndedEvent['summary'], durati
   console.log(`  ${pc.bold('Files Read:')}       ${summary.filesRead}`);
   console.log(`  ${pc.bold('Files Written:')}    ${summary.filesWritten}`);
   console.log(`  ${pc.bold('Commands Run:')}     ${summary.commandsRun}`);
+  if (summary.approvedCount !== undefined) {
+    console.log(`  ${pc.bold('Approved Actions:')} ${pc.green(summary.approvedCount.toString())}`);
+  }
+  if (summary.blockedCount !== undefined) {
+    console.log(`  ${pc.bold('Blocked Actions:')}  ${pc.red(summary.blockedCount.toString())}`);
+  }
   console.log(`  ${pc.bold('Errors:')}           ${summary.errorsCount > 0 ? pc.red(summary.errorsCount) : '0'}`);
   console.log(`  ${pc.bold('Overall Risk:')}     ${riskColor(pc.bold(`${summary.overallRiskScore}/100`))}`);
   console.log();

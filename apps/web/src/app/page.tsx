@@ -7,6 +7,7 @@ import { Header } from '@/components/Header';
 import { MetricCards } from '@/components/MetricCards';
 import { Timeline } from '@/components/Timeline';
 import { Inspector } from '@/components/Inspector';
+import { ApprovalModal } from '@/components/ApprovalModal';
 import {
   MessageSquare,
   Bot,
@@ -31,6 +32,9 @@ function DashboardContent() {
     session,
     events,
     actions,
+    pendingApproval,
+    approve,
+    deny,
     isConnected,
     error,
     allSessions,
@@ -74,6 +78,15 @@ function DashboardContent() {
         </div>
       )}
 
+      {/* Human Approval Modal (V0.2 Policy Gate) */}
+      {pendingApproval && (
+        <ApprovalModal
+          approval={pendingApproval}
+          onApprove={approve}
+          onDeny={deny}
+        />
+      )}
+
       {/* Metric summary counters */}
       <MetricCards
         actions={actions}
@@ -94,7 +107,7 @@ function DashboardContent() {
                 AGENT MONITOR CONTROL PLANE
               </h2>
               <p className="text-xs text-ink-muted mt-1.5 leading-relaxed font-medium">
-                Pure, real-time observability, timeline inspection, file diffs, and deterministic risk analysis for autonomous coding agents.
+                Real-time observability, deterministic policy gates, and human approval for autonomous coding agents.
               </p>
             </div>
 
@@ -132,20 +145,20 @@ function DashboardContent() {
               <div className="p-3 rounded bg-alabaster-muted border border-alabaster-border">
                 <div className="flex items-center gap-1.5 text-xs font-bold text-ink mb-1">
                   <Terminal className="w-3.5 h-3.5 text-terracotta" />
-                  Visual Diffs
+                  Policy Gates
                 </div>
                 <p className="text-[11px] text-ink-muted leading-tight font-medium">
-                  Side-by-side file patches & command output.
+                  Deterministic ALLOW, DENY & ASK enforcement.
                 </p>
               </div>
 
               <div className="p-3 rounded bg-alabaster-muted border border-alabaster-border">
                 <div className="flex items-center gap-1.5 text-xs font-bold text-ink mb-1">
                   <Shield className="w-3.5 h-3.5 text-terracotta" />
-                  Risk Engine
+                  Human Approval
                 </div>
                 <p className="text-[11px] text-ink-muted leading-tight font-medium">
-                  Flags secrets, keys, and dangerous commands.
+                  Single-click browser & terminal approval.
                 </p>
               </div>
             </div>

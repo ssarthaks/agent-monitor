@@ -1,8 +1,12 @@
 import { Database } from 'better-sqlite3';
-import { AgentEvent, AgentSession } from '@agent-monitor/core';
+import { AgentEvent, AgentSession, ApprovalRequest, ApprovalStatus } from '@agent-monitor/core';
 
 export class SessionRepository {
   constructor(private db: Database) {}
+
+  // ─────────────────────────────────────────────────────────────
+  // Session Persistence
+  // ─────────────────────────────────────────────────────────────
 
   createSession(session: AgentSession): void {
     const stmt = this.db.prepare(`
@@ -41,7 +45,6 @@ export class SessionRepository {
     let summary = row.summary_json ? JSON.parse(row.summary_json) : null;
     let riskScore = row.risk_score;
 
-    // Self-healing: if session shows running but has session.ended event in database
     if (status === 'running') {
       const endedEventRow = this.db
         .prepare(`SELECT payload_json FROM events WHERE session_id = ? AND type = 'session.ended' LIMIT 1`)
@@ -54,7 +57,6 @@ export class SessionRepository {
         summary = endedEvent.summary || summary;
         riskScore = Math.max(riskScore, endedEvent.summary?.overallRiskScore || 0);
 
-        // Update row for consistency
         this.db
           .prepare(`UPDATE sessions SET status = ?, ended_at = ?, summary_json = ?, risk_score = ? WHERE id = ?`)
           .run(status, endedAt, JSON.stringify(summary), riskScore, id);
@@ -163,6 +165,10 @@ export class SessionRepository {
     return (row?.max_seq || 0) + 1;
   }
 
+  // ─────────────────────────────────────────────────────────────
+  // Event Persistence
+  // ─────────────────────────────────────────────────────────────
+
   insertEvent(event: AgentEvent): void {
     const stmt = this.db.prepare(`
       INSERT INTO events (
@@ -214,7 +220,6 @@ export class SessionRepository {
         .run(riskScore, event.sessionId);
     }
 
-    // Automatically update session status and summary when session.ended is emitted
     if (event.type === 'session.ended') {
       this.db
         .prepare(`
@@ -240,5 +245,172 @@ export class SessionRepository {
     `);
     const rows = stmt.all(sessionId, afterSequence) as any[];
     return rows.map((r) => JSON.parse(r.payload_json));
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // Approval Persistence & Atomic Resolution (V0.2)
+  // ─────────────────────────────────────────────────────────────
+
+  createApproval(approval: ApprovalRequest): void {
+    const stmt = this.db.prepare(`
+      INSERT INTO approvals (
+        id, action_id, session_id, action_kind, category, params_json,
+        risk_score, risk_level, risk_flags_json, reason, matched_policies_json,
+        status, resolved_by, created_at, resolved_at
+      ) VALUES (
+        @id, @actionId, @sessionId, @actionKind, @category, @paramsJson,
+        @riskScore, @riskLevel, @riskFlagsJson, @reason, @matchedPoliciesJson,
+        @status, @resolvedBy, @createdAt, @resolvedAt
+      )
+    `);
+
+    stmt.run({
+      id: approval.id,
+      actionId: approval.actionId,
+      sessionId: approval.sessionId,
+      actionKind: approval.actionKind,
+      category: approval.category,
+      paramsJson: JSON.stringify(approval.params),
+      riskScore: approval.risk.score,
+      riskLevel: approval.risk.level,
+      riskFlagsJson: JSON.stringify(approval.risk.flags),
+      reason: approval.reason,
+      matchedPoliciesJson: JSON.stringify(approval.matchedPolicies),
+      status: approval.status,
+      resolvedBy: approval.resolvedBy ?? null,
+      createdAt: approval.createdAt,
+      resolvedAt: approval.resolvedAt ?? null,
+    });
+  }
+
+  getApproval(id: string): ApprovalRequest | null {
+    const stmt = this.db.prepare(`SELECT * FROM approvals WHERE id = ?`);
+    const row = stmt.get(id) as any;
+    if (!row) return null;
+    return this.mapApprovalRow(row);
+  }
+
+  getApprovalByActionId(actionId: string): ApprovalRequest | null {
+    const stmt = this.db.prepare(`SELECT * FROM approvals WHERE action_id = ? ORDER BY created_at DESC LIMIT 1`);
+    const row = stmt.get(actionId) as any;
+    if (!row) return null;
+    return this.mapApprovalRow(row);
+  }
+
+  listApprovals(sessionId?: string, status?: ApprovalStatus): ApprovalRequest[] {
+    let query = `SELECT * FROM approvals`;
+    const conditions: string[] = [];
+    const params: any[] = [];
+
+    if (sessionId) {
+      conditions.push(`session_id = ?`);
+      params.push(sessionId);
+    }
+    if (status) {
+      conditions.push(`status = ?`);
+      params.push(status);
+    }
+
+    if (conditions.length > 0) {
+      query += ` WHERE ${conditions.join(' AND ')}`;
+    }
+
+    query += ` ORDER BY created_at DESC`;
+
+    const stmt = this.db.prepare(query);
+    const rows = stmt.all(...params) as any[];
+    return rows.map((r) => this.mapApprovalRow(r));
+  }
+
+  /**
+   * Atomically resolves an approval request.
+   * Uses atomic conditional update WHERE id = ? AND status = 'pending'.
+   * Returns success: true only for the first valid resolution.
+   */
+  resolveApproval(
+    id: string,
+    decision: 'approved' | 'denied',
+    resolvedBy: string = 'user'
+  ): { success: boolean; approval: ApprovalRequest | null } {
+    const stmt = this.db.prepare(`
+      UPDATE approvals
+      SET status = @decision,
+          resolved_by = @resolvedBy,
+          resolved_at = @resolvedAt
+      WHERE id = @id
+        AND status = 'pending'
+    `);
+
+    const result = stmt.run({
+      id,
+      decision,
+      resolvedBy,
+      resolvedAt: Date.now(),
+    });
+
+    const current = this.getApproval(id);
+    return {
+      success: result.changes > 0,
+      approval: current,
+    };
+  }
+
+  /**
+   * Expires all pending approvals older than maxAgeMs.
+   */
+  expirePendingApprovals(maxAgeMs: number = 300000): ApprovalRequest[] {
+    const cutoffTime = Date.now() - maxAgeMs;
+
+    const findStmt = this.db.prepare(`
+      SELECT id FROM approvals
+      WHERE status = 'pending' AND created_at < ?
+    `);
+    const pendingExpired = findStmt.all(cutoffTime) as Array<{ id: string }>;
+
+    if (pendingExpired.length === 0) return [];
+
+    const expireStmt = this.db.prepare(`
+      UPDATE approvals
+      SET status = 'expired',
+          resolved_by = 'timeout',
+          resolved_at = @resolvedAt
+      WHERE id = @id
+        AND status = 'pending'
+    `);
+
+    const now = Date.now();
+    const expiredList: ApprovalRequest[] = [];
+
+    for (const item of pendingExpired) {
+      const res = expireStmt.run({ id: item.id, resolvedAt: now });
+      if (res.changes > 0) {
+        const app = this.getApproval(item.id);
+        if (app) expiredList.push(app);
+      }
+    }
+
+    return expiredList;
+  }
+
+  private mapApprovalRow(row: any): ApprovalRequest {
+    return {
+      id: row.id,
+      actionId: row.action_id,
+      sessionId: row.session_id,
+      actionKind: row.action_kind,
+      category: row.category,
+      params: JSON.parse(row.params_json),
+      risk: {
+        score: row.risk_score,
+        level: row.risk_level,
+        flags: JSON.parse(row.risk_flags_json || '[]'),
+      },
+      reason: row.reason,
+      matchedPolicies: JSON.parse(row.matched_policies_json || '[]'),
+      status: row.status,
+      resolvedBy: row.resolved_by,
+      createdAt: row.created_at,
+      resolvedAt: row.resolved_at,
+    };
   }
 }

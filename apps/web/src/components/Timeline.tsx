@@ -1,7 +1,7 @@
-'use client';
+"use client";
 
-import React, { useState, useMemo } from 'react';
-import { ActionItem } from '@/hooks/useSessionStream';
+import React, { useState, useMemo } from "react";
+import { ActionItem } from "@/hooks/useSessionStream";
 import {
   CheckCircle2,
   XCircle,
@@ -11,7 +11,7 @@ import {
   Search,
   SlidersHorizontal,
   X,
-} from 'lucide-react';
+} from "lucide-react";
 
 interface TimelineProps {
   actions: ActionItem[];
@@ -28,25 +28,35 @@ export function Timeline({
   filterCategory,
   onClearCategoryFilter,
 }: TimelineProps) {
-  const [searchQuery, setSearchQuery] = useState('');
-  const [activeTab, setActiveTab] = useState<'all' | 'file' | 'process' | 'error' | 'high_risk'>('all');
+  const [searchQuery, setSearchQuery] = useState("");
+  const [activeTab, setActiveTab] = useState<
+    "all" | "file" | "process" | "error" | "high_risk"
+  >("all");
 
   const filteredActions = useMemo(() => {
     return actions.filter((action) => {
       // 1. Metric card category filter
       if (filterCategory) {
-        if (filterCategory === 'error') {
-          if (action.status !== 'failed' && action.status !== 'blocked') return false;
+        if (filterCategory === "error") {
+          if (action.status !== "failed" && action.status !== "blocked")
+            return false;
         } else if (action.kind !== filterCategory) {
           return false;
         }
       }
 
       // 2. Tab filter
-      if (activeTab === 'file' && !action.kind.startsWith('file.')) return false;
-      if (activeTab === 'process' && action.kind !== 'process.exec') return false;
-      if (activeTab === 'error' && action.status !== 'failed' && action.status !== 'blocked') return false;
-      if (activeTab === 'high_risk') {
+      if (activeTab === "file" && !action.kind.startsWith("file."))
+        return false;
+      if (activeTab === "process" && action.kind !== "process.exec")
+        return false;
+      if (
+        activeTab === "error" &&
+        action.status !== "failed" &&
+        action.status !== "blocked"
+      )
+        return false;
+      if (activeTab === "high_risk") {
         const score = action.risk?.score || 0;
         if (score < 40) return false;
       }
@@ -54,9 +64,13 @@ export function Timeline({
       // 3. Search query
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase();
-        const target = (action.params.path || action.params.command || '').toLowerCase();
+        const target = (
+          action.params.path ||
+          action.params.command ||
+          ""
+        ).toLowerCase();
         const kind = action.kind.toLowerCase();
-        const reason = (action.reason || '').toLowerCase();
+        const reason = (action.reason || "").toLowerCase();
         return target.includes(q) || kind.includes(q) || reason.includes(q);
       }
 
@@ -66,25 +80,25 @@ export function Timeline({
 
   const getMethodBadge = (kind: string) => {
     switch (kind) {
-      case 'file.read':
+      case "file.read":
         return (
           <span className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded bg-alabaster-muted text-ink border border-alabaster-border">
             READ
           </span>
         );
-      case 'file.write':
+      case "file.write":
         return (
           <span className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded bg-alabaster-muted text-ink border border-alabaster-border">
             WRITE
           </span>
         );
-      case 'file.list':
+      case "file.list":
         return (
           <span className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded bg-alabaster-muted text-ink border border-alabaster-border">
             LIST
           </span>
         );
-      case 'process.exec':
+      case "process.exec":
         return (
           <span className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded bg-ink text-white">
             EXEC
@@ -100,30 +114,37 @@ export function Timeline({
   };
 
   const getStatusIcon = (action: ActionItem) => {
-    if (action.status === 'blocked') {
+    if (action.status === "waiting_approval") {
+      return (
+        <ShieldAlert className="w-3.5 h-3.5 text-amber-600 animate-pulse shrink-0" />
+      );
+    }
+    if (action.status === "blocked") {
       return <ShieldAlert className="w-3.5 h-3.5 text-rose-600 shrink-0" />;
     }
-    if (action.status === 'failed') {
+    if (action.status === "failed") {
       return <XCircle className="w-3.5 h-3.5 text-rose-600 shrink-0" />;
     }
-    if (action.status === 'running') {
-      return <Loader2 className="w-3.5 h-3.5 text-terracotta animate-spin shrink-0" />;
+    if (action.status === "running") {
+      return (
+        <Loader2 className="w-3.5 h-3.5 text-terracotta animate-spin shrink-0" />
+      );
     }
-    if (action.risk && action.risk.level === 'CRITICAL') {
+    if (action.risk && action.risk.level === "CRITICAL") {
       return <AlertTriangle className="w-3.5 h-3.5 text-rose-600 shrink-0" />;
     }
-    if (action.risk && action.risk.level === 'HIGH') {
+    if (action.risk && action.risk.level === "HIGH") {
       return <AlertTriangle className="w-3.5 h-3.5 text-terracotta shrink-0" />;
     }
     return <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />;
   };
 
   const formatTarget = (action: ActionItem) => {
-    if (action.kind.startsWith('file.')) {
-      return action.params.path || '.';
+    if (action.kind.startsWith("file.")) {
+      return action.params.path || ".";
     }
-    if (action.kind === 'process.exec') {
-      return action.params.command || '';
+    if (action.kind === "process.exec") {
+      return action.params.command || "";
     }
     return JSON.stringify(action.params);
   };
@@ -165,7 +186,7 @@ export function Timeline({
           />
           {searchQuery && (
             <button
-              onClick={() => setSearchQuery('')}
+              onClick={() => setSearchQuery("")}
               className="absolute right-2.5 top-1/2 -translate-y-1/2 text-ink-muted hover:text-ink"
             >
               <X className="w-3 h-3" />
@@ -176,19 +197,19 @@ export function Timeline({
         {/* Filter Pills */}
         <div className="flex items-center gap-1 overflow-x-auto pb-0.5 text-[11px]">
           {[
-            { id: 'all', label: 'All' },
-            { id: 'file', label: 'Files' },
-            { id: 'process', label: 'Commands' },
-            { id: 'error', label: 'Errors' },
-            { id: 'high_risk', label: 'High Risk' },
+            { id: "all", label: "All" },
+            { id: "file", label: "Files" },
+            { id: "process", label: "Commands" },
+            { id: "error", label: "Errors" },
+            { id: "high_risk", label: "High Risk" },
           ].map((tab) => (
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id as any)}
               className={`px-2.5 py-0.5 rounded font-bold transition-colors whitespace-nowrap uppercase tracking-wider text-[10px] ${
                 activeTab === tab.id
-                  ? 'bg-ink text-white'
-                  : 'bg-white text-ink-muted border border-alabaster-border hover:border-ink hover:text-ink'
+                  ? "bg-ink text-white"
+                  : "bg-white text-ink-muted border border-alabaster-border hover:border-ink hover:text-ink"
               }`}
             >
               {tab.label}
@@ -204,9 +225,9 @@ export function Timeline({
             <SlidersHorizontal className="w-8 h-8 mb-2 text-ink-faint stroke-[1.5]" />
             <p className="font-bold text-ink">No matching activities</p>
             <p className="text-[11px] text-ink-muted mt-0.5">
-              {searchQuery || activeTab !== 'all'
-                ? 'Clear filters or search term to see all actions'
-                : 'Waiting for agent to execute operations...'}
+              {searchQuery || activeTab !== "all"
+                ? "Clear filters or search term to see all actions"
+                : "Waiting for agent to execute operations..."}
             </p>
           </div>
         ) : (
@@ -221,8 +242,8 @@ export function Timeline({
                 onClick={() => onSelectAction(action)}
                 className={`w-full text-left px-3 sm:px-3.5 py-2.5 flex items-center gap-2 sm:gap-2.5 transition-all text-xs group ${
                   isSelected
-                    ? 'bg-terracotta-light border-l-4 border-terracotta font-semibold'
-                    : 'bg-white hover:bg-alabaster-muted border-l-4 border-transparent'
+                    ? "bg-terracotta-light border-l-4 border-terracotta font-semibold"
+                    : "bg-white hover:bg-alabaster-muted border-l-4 border-transparent"
                 }`}
               >
                 <span className="text-ink-muted text-[10px] font-mono shrink-0 w-14">
@@ -239,14 +260,14 @@ export function Timeline({
                   {targetStr}
                 </span>
 
-                {action.risk && action.risk.level !== 'NONE' && (
+                {action.risk && action.risk.level !== "NONE" && (
                   <span
                     className={`shrink-0 px-1.5 py-0.2 rounded text-[10px] font-black font-mono ${
-                      action.risk.level === 'CRITICAL'
-                        ? 'bg-rose-100 text-rose-700 border border-rose-200'
-                        : action.risk.level === 'HIGH'
-                        ? 'bg-terracotta-light text-terracotta border border-terracotta-border'
-                        : 'bg-amber-100 text-amber-800 border border-amber-200'
+                      action.risk.level === "CRITICAL"
+                        ? "bg-rose-100 text-rose-700 border border-rose-200"
+                        : action.risk.level === "HIGH"
+                          ? "bg-terracotta-light text-terracotta border border-terracotta-border"
+                          : "bg-amber-100 text-amber-800 border border-amber-200"
                     }`}
                   >
                     {action.risk.score}
