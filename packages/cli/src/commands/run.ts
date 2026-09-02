@@ -37,22 +37,55 @@ export interface RunCommandOptions {
   apiKey?: string;
 }
 
+function loadEnvFiles(workspaceRoot: string) {
+  const envCandidates = [
+    path.join(process.cwd(), '.env.local'),
+    path.join(process.cwd(), '.env'),
+    path.join(workspaceRoot, '.env.local'),
+    path.join(workspaceRoot, '.env'),
+  ];
+
+  for (const file of envCandidates) {
+    if (fs.existsSync(file)) {
+      try {
+        const content = fs.readFileSync(file, 'utf8');
+        for (const line of content.split('\n')) {
+          const trimmed = line.trim();
+          if (!trimmed || trimmed.startsWith('#')) continue;
+          const eqIdx = trimmed.indexOf('=');
+          if (eqIdx > 0) {
+            const key = trimmed.slice(0, eqIdx).trim();
+            const val = trimmed.slice(eqIdx + 1).trim().replace(/^["']|["']$/g, '');
+            if (key && val && !process.env[key]) {
+              process.env[key] = val;
+            }
+          }
+        }
+      } catch {
+        // ignore
+      }
+    }
+  }
+}
+
 export async function runAgentCommand(options: RunCommandOptions): Promise<void> {
   const workspaceRoot = path.resolve(options.workspace || process.cwd());
+  loadEnvFiles(workspaceRoot);
+
   const dbDir = path.join(workspaceRoot, '.agent-monitor');
   if (!fs.existsSync(dbDir)) {
     fs.mkdirSync(dbDir, { recursive: true });
   }
 
   const dbPath = options.db ? path.resolve(options.db) : path.join(dbDir, 'data.db');
-  const serverPort = options.port || 4040;
-  const webPort = options.webPort || 3000;
+  const serverPort = options.port || Number(process.env.AGENT_MONITOR_PORT) || 4040;
+  const webPort = options.webPort || Number(process.env.PORT) || 3000;
   const model = options.model || process.env.DEEPSEEK_MODEL || 'deepseek-chat';
   const apiKey = options.apiKey || process.env.DEEPSEEK_API_KEY;
 
   if (!apiKey) {
-    console.error('\n❌ ERROR: DEEPSEEK_API_KEY environment variable is required to run the agent.');
-    console.error('Please set it using: export DEEPSEEK_API_KEY="your-api-key"\n');
+    console.error('\n❌ ERROR: DEEPSEEK_API_KEY is required to run the agent.');
+    console.error('Please add DEEPSEEK_API_KEY to your .env or .env.local file, or export it in your shell.\n');
     process.exit(1);
   }
 

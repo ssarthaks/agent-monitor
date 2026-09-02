@@ -11,10 +11,11 @@
     "build": "npm run build --workspaces --if-present",
     "test": "vitest run",
     "dev:web": "npm run dev --workspace=apps/web",
-    "cli": "node packages/cli/dist/index.js"
+    "cli": "tsx packages/cli/src/index.ts"
   },
   "devDependencies": {
-    "@types/node": "^20.19.43",
+    "@types/node": "^20.17.0",
+    "tsx": "^4.19.2",
     "typescript": "^5.6.3",
     "vitest": "^2.1.4"
   }
