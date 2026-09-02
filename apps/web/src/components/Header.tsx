@@ -1,7 +1,7 @@
-'use client';
+"use client";
 
-import React, { useState } from 'react';
-import { AgentSession, AgentEvent } from '@agent-monitor/core';
+import React, { useState } from "react";
+import { AgentSession, AgentEvent } from "@agent-monitor/core";
 import {
   Activity,
   ShieldAlert,
@@ -14,7 +14,7 @@ import {
   Wifi,
   WifiOff,
   Cpu,
-} from 'lucide-react';
+} from "lucide-react";
 
 interface HeaderProps {
   session: AgentSession | null;
@@ -38,6 +38,38 @@ export function Header({
 
   const riskScore = session?.riskScore || 0;
 
+  const liveUsage = React.useMemo(() => {
+    if (session?.summary?.usage) return session.summary.usage;
+    let promptTokens = 0;
+    let completionTokens = 0;
+    let totalTokens = 0;
+    let cacheHitTokens = 0;
+    let cacheMissTokens = 0;
+    let estimatedCostUsd = 0;
+
+    for (const ev of events) {
+      if (ev.type === "agent.message" && (ev as any).usage) {
+        const u = (ev as any).usage;
+        promptTokens += u.promptTokens || 0;
+        completionTokens += u.completionTokens || 0;
+        totalTokens += u.totalTokens || u.promptTokens + u.completionTokens;
+        cacheHitTokens += u.cacheHitTokens || 0;
+        cacheMissTokens += u.cacheMissTokens || 0;
+        estimatedCostUsd += u.estimatedCostUsd || 0;
+      }
+    }
+
+    if (totalTokens === 0) return null;
+    return {
+      promptTokens,
+      completionTokens,
+      totalTokens,
+      cacheHitTokens,
+      cacheMissTokens,
+      estimatedCostUsd,
+    };
+  }, [session?.summary?.usage, events]);
+
   const handleCopyId = () => {
     if (session?.id) {
       navigator.clipboard.writeText(session.id);
@@ -53,9 +85,11 @@ export function Header({
       events,
       exportedAt: new Date().toISOString(),
     };
-    const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+    const blob = new Blob([JSON.stringify(exportData, null, 2)], {
+      type: "application/json",
+    });
     const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
+    const a = document.createElement("a");
     a.href = url;
     a.download = `agent-monitor-${session.id}.json`;
     a.click();
@@ -111,7 +145,7 @@ export function Header({
         </span>
       );
     }
-    if (session.status === 'running') {
+    if (session.status === "running") {
       return (
         <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-bold bg-terracotta text-white uppercase tracking-wider">
           <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse"></span>
@@ -119,7 +153,7 @@ export function Header({
         </span>
       );
     }
-    if (session.status === 'completed') {
+    if (session.status === "completed") {
       return (
         <span className="px-2.5 py-1 rounded text-xs font-bold bg-ink text-white uppercase tracking-wider">
           COMPLETED
@@ -134,12 +168,12 @@ export function Header({
   };
 
   const formatRuntime = () => {
-    if (!session) return '00:00';
+    if (!session) return "00:00";
     const end = session.endedAt || Date.now();
     const sec = Math.floor((end - session.startedAt) / 1000);
     const m = Math.floor(sec / 60);
     const s = sec % 60;
-    return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+    return `${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
   };
 
   return (
@@ -157,7 +191,7 @@ export function Header({
                   AGENT MONITOR
                 </span>
                 <span className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded bg-alabaster-muted text-ink border border-alabaster-border">
-                  V0.1
+                  V0.2
                 </span>
               </div>
             </div>
@@ -174,7 +208,9 @@ export function Header({
               >
                 <Cpu className="w-3.5 h-3.5 text-terracotta shrink-0" />
                 <span className="truncate">
-                  {session ? `${session.id.slice(0, 8)}... — ${session.task.slice(0, 16)}...` : 'Select Session'}
+                  {session
+                    ? `${session.id.slice(0, 8)}... — ${session.task.slice(0, 16)}...`
+                    : "Select Session"}
                 </span>
                 <ChevronDown className="w-3.5 h-3.5 text-ink-muted shrink-0 ml-auto" />
               </button>
@@ -191,7 +227,8 @@ export function Header({
                     </div>
                     <div className="max-h-64 overflow-y-auto">
                       {allSessions.map((s) => {
-                        const isCurrent = s.id === (selectedSessionId || session?.id);
+                        const isCurrent =
+                          s.id === (selectedSessionId || session?.id);
                         return (
                           <button
                             key={s.id}
@@ -200,7 +237,9 @@ export function Header({
                               setIsDropdownOpen(false);
                             }}
                             className={`w-full text-left px-3.5 py-2.5 text-xs transition-colors flex flex-col gap-1 hover:bg-alabaster-muted ${
-                              isCurrent ? 'bg-terracotta-light border-l-4 border-terracotta font-semibold' : ''
+                              isCurrent
+                                ? "bg-terracotta-light border-l-4 border-terracotta font-semibold"
+                                : ""
                             }`}
                           >
                             <div className="flex items-center justify-between gap-2">
@@ -209,17 +248,20 @@ export function Header({
                               </span>
                               <span
                                 className={`text-[10px] px-1.5 py-0.5 rounded font-bold uppercase ${
-                                  s.status === 'running'
-                                    ? 'text-terracotta bg-terracotta-light'
-                                    : 'text-ink-muted bg-alabaster-muted'
+                                  s.status === "running"
+                                    ? "text-terracotta bg-terracotta-light"
+                                    : "text-ink-muted bg-alabaster-muted"
                                 }`}
                               >
                                 {s.status}
                               </span>
                             </div>
-                            <span className="text-[11px] text-ink-muted truncate font-medium">{s.task}</span>
+                            <span className="text-[11px] text-ink-muted truncate font-medium">
+                              {s.task}
+                            </span>
                             <span className="text-[10px] text-ink-faint font-mono">
-                              {new Date(s.startedAt).toLocaleTimeString()} • {s.model}
+                              {new Date(s.startedAt).toLocaleTimeString()} •{" "}
+                              {s.model}
                             </span>
                           </button>
                         );
@@ -241,7 +283,11 @@ export function Header({
                 className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-white hover:bg-alabaster-muted text-ink border border-alabaster-border text-[11px] font-mono font-medium transition-colors"
                 title="Copy Session ID"
               >
-                {copied ? <Check className="w-3 h-3 text-emerald-600" /> : <Copy className="w-3 h-3 text-ink-muted" />}
+                {copied ? (
+                  <Check className="w-3 h-3 text-emerald-600" />
+                ) : (
+                  <Copy className="w-3 h-3 text-ink-muted" />
+                )}
                 <span>{session.id.slice(0, 10)}</span>
               </button>
 
@@ -252,6 +298,26 @@ export function Header({
               >
                 <Download className="w-3.5 h-3.5" />
               </button>
+            </div>
+          )}
+
+          {liveUsage && (
+            <div
+              className="hidden md:flex items-center gap-1.5 text-xs bg-alabaster-muted px-2.5 py-1 rounded border border-alabaster-border font-mono text-ink"
+              title={`Input: ${liveUsage.promptTokens.toLocaleString()} (${liveUsage.cacheHitTokens?.toLocaleString() || 0} cached) | Output: ${liveUsage.completionTokens.toLocaleString()}`}
+            >
+              <span className="text-ink-muted text-[11px] font-bold">
+                TOKENS:
+              </span>
+              <span className="font-bold">
+                {liveUsage.totalTokens.toLocaleString()}
+              </span>
+              <span className="text-stone-300">•</span>
+              <span className="text-emerald-700 font-bold">
+                {liveUsage.estimatedCostUsd < 0.01
+                  ? `$${liveUsage.estimatedCostUsd.toFixed(5)}`
+                  : `$${liveUsage.estimatedCostUsd.toFixed(3)}`}
+              </span>
             </div>
           )}
 
@@ -266,13 +332,23 @@ export function Header({
           <div
             className={`flex items-center gap-1 text-[11px] font-bold px-2 py-1 rounded border transition-colors ${
               isConnected
-                ? 'bg-terracotta-light text-terracotta border-terracotta-border'
-                : 'bg-alabaster-muted text-ink-muted border-alabaster-border'
+                ? "bg-terracotta-light text-terracotta border-terracotta-border"
+                : "bg-alabaster-muted text-ink-muted border-alabaster-border"
             }`}
-            title={isConnected ? 'Real-time SSE Stream Active' : 'Disconnected / SQLite Polling'}
+            title={
+              isConnected
+                ? "Real-time SSE Stream Active"
+                : "Disconnected / SQLite Polling"
+            }
           >
-            {isConnected ? <Wifi className="w-3 h-3 text-terracotta" /> : <WifiOff className="w-3 h-3" />}
-            <span className="hidden sm:inline uppercase">{isConnected ? 'Live' : 'Offline'}</span>
+            {isConnected ? (
+              <Wifi className="w-3 h-3 text-terracotta" />
+            ) : (
+              <WifiOff className="w-3 h-3" />
+            )}
+            <span className="hidden sm:inline uppercase">
+              {isConnected ? "Live" : "Offline"}
+            </span>
           </div>
         </div>
       </div>

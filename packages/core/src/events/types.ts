@@ -1,30 +1,30 @@
-import { ActionCategory, ActionKind } from '../actions/types.js';
-import { RiskAssessment } from '../risk/types.js';
-import { PolicyDecision } from '../policy/types.js';
+import { ActionCategory, ActionKind } from "../actions/types.js";
+import { RiskAssessment } from "../risk/types.js";
+import { PolicyDecision } from "../policy/types.js";
 
 export type EventType =
-  | 'session.started'
-  | 'session.ended'
-  | 'agent.message'
-  | 'policy.evaluated'
-  | 'approval.requested'
-  | 'approval.resolved'
-  | 'action.started'
-  | 'action.completed'
-  | 'action.failed'
-  | 'action.blocked';
+  | "session.started"
+  | "session.ended"
+  | "agent.message"
+  | "policy.evaluated"
+  | "approval.requested"
+  | "approval.resolved"
+  | "action.started"
+  | "action.completed"
+  | "action.failed"
+  | "action.blocked";
 
 export interface BaseEvent {
-  id: string;              // Unique event ID (e.g. "evt_01J...")
-  sequence: number;        // Monotonic per-session sequence (1, 2, 3...)
-  sessionId: string;       // Unique session ID (e.g. "ses_01J...")
-  agentId: string;         // e.g. "deepseek-coding-agent"
-  timestamp: number;       // Unix epoch milliseconds
+  id: string; // Unique event ID (e.g. "evt_01J...")
+  sequence: number; // Monotonic per-session sequence (1, 2, 3...)
+  sessionId: string; // Unique session ID (e.g. "ses_01J...")
+  agentId: string; // e.g. "deepseek-coding-agent"
+  timestamp: number; // Unix epoch milliseconds
   type: EventType;
 }
 
 export interface SessionStartedEvent extends BaseEvent {
-  type: 'session.started';
+  type: "session.started";
   agentName: string;
   provider: string;
   model: string;
@@ -32,27 +32,43 @@ export interface SessionStartedEvent extends BaseEvent {
   task: string;
 }
 
+export interface TokenUsage {
+  promptTokens: number;
+  completionTokens: number;
+  totalTokens: number;
+  cacheHitTokens?: number;
+  cacheMissTokens?: number;
+  estimatedCostUsd: number;
+}
+
+export interface SessionSummary {
+  totalActions: number;
+  filesRead: number;
+  filesWritten: number;
+  commandsRun: number;
+  errorsCount: number;
+  overallRiskScore: number;
+  approvedCount?: number;
+  blockedCount?: number;
+  usage?: TokenUsage;
+}
+
 export interface SessionEndedEvent extends BaseEvent {
-  type: 'session.ended';
-  status: 'completed' | 'failed' | 'interrupted';
+  type: "session.ended";
+  status: "completed" | "failed" | "interrupted";
   durationMs: number;
-  summary: {
-    totalActions: number;
-    filesRead: number;
-    filesWritten: number;
-    commandsRun: number;
-    errorsCount: number;
-    overallRiskScore: number;
-  };
+  summary: SessionSummary;
 }
 
 export interface AgentMessageEvent extends BaseEvent {
-  type: 'agent.message';
+  type: "agent.message";
   content: string; // Visible text emitted by the agent
+  step?: number;
+  usage?: TokenUsage;
 }
 
 export interface PolicyEvaluatedEvent extends BaseEvent {
-  type: 'policy.evaluated';
+  type: "policy.evaluated";
   actionId: string;
   decision: PolicyDecision;
   matchedPolicies: string[];
@@ -61,7 +77,7 @@ export interface PolicyEvaluatedEvent extends BaseEvent {
 }
 
 export interface ApprovalRequestedEvent extends BaseEvent {
-  type: 'approval.requested';
+  type: "approval.requested";
   approvalId: string;
   actionId: string;
   actionKind: ActionKind;
@@ -73,15 +89,15 @@ export interface ApprovalRequestedEvent extends BaseEvent {
 }
 
 export interface ApprovalResolvedEvent extends BaseEvent {
-  type: 'approval.resolved';
+  type: "approval.resolved";
   approvalId: string;
   actionId: string;
-  decision: 'approved' | 'denied' | 'expired';
+  decision: "approved" | "denied" | "expired";
   resolvedBy?: string | null;
 }
 
 export interface ActionStartedEvent extends BaseEvent {
-  type: 'action.started';
+  type: "action.started";
   actionId: string; // Unique ID correlating all events for this action
   kind: ActionKind;
   category: ActionCategory;
@@ -90,7 +106,7 @@ export interface ActionStartedEvent extends BaseEvent {
 }
 
 export interface ActionCompletedEvent extends BaseEvent {
-  type: 'action.completed';
+  type: "action.completed";
   actionId: string;
   kind: ActionKind;
   category: ActionCategory;
@@ -107,7 +123,7 @@ export interface ActionCompletedEvent extends BaseEvent {
 }
 
 export interface ActionFailedEvent extends BaseEvent {
-  type: 'action.failed';
+  type: "action.failed";
   actionId: string;
   kind: ActionKind;
   category: ActionCategory;
@@ -121,7 +137,7 @@ export interface ActionFailedEvent extends BaseEvent {
 }
 
 export interface ActionBlockedEvent extends BaseEvent {
-  type: 'action.blocked';
+  type: "action.blocked";
   actionId: string;
   kind: ActionKind;
   category: ActionCategory;
@@ -157,7 +173,7 @@ export interface AgentSession {
   task: string;
   startedAt: number;
   endedAt?: number | null;
-  status: 'running' | 'completed' | 'failed' | 'interrupted';
+  status: "running" | "completed" | "failed" | "interrupted";
   riskScore: number;
-  summary?: SessionEndedEvent['summary'] | null;
+  summary?: SessionEndedEvent["summary"] | null;
 }

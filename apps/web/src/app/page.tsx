@@ -1,13 +1,13 @@
-'use client';
+"use client";
 
-import React, { useState, useEffect, Suspense } from 'react';
-import { useSearchParams } from 'next/navigation';
-import { useSessionStream, ActionItem } from '@/hooks/useSessionStream';
-import { Header } from '@/components/Header';
-import { MetricCards } from '@/components/MetricCards';
-import { Timeline } from '@/components/Timeline';
-import { Inspector } from '@/components/Inspector';
-import { ApprovalModal } from '@/components/ApprovalModal';
+import React, { useState, useEffect, Suspense } from "react";
+import { useSearchParams } from "next/navigation";
+import { useSessionStream, ActionItem } from "@/hooks/useSessionStream";
+import { Header } from "@/components/Header";
+import { MetricCards } from "@/components/MetricCards";
+import { Timeline } from "@/components/Timeline";
+import { Inspector } from "@/components/Inspector";
+import { ApprovalModal } from "@/components/ApprovalModal";
 import {
   MessageSquare,
   Bot,
@@ -17,15 +17,19 @@ import {
   Sparkles,
   Shield,
   Activity,
-} from 'lucide-react';
+} from "lucide-react";
 
 function DashboardContent() {
   const searchParams = useSearchParams();
-  const querySessionId = searchParams.get('sessionId');
+  const querySessionId = searchParams.get("sessionId");
 
-  const [selectedSessionId, setSelectedSessionId] = useState<string | null>(querySessionId);
+  const [selectedSessionId, setSelectedSessionId] = useState<string | null>(
+    querySessionId,
+  );
   const [selectedAction, setSelectedAction] = useState<ActionItem | null>(null);
-  const [activeMetricFilter, setActiveMetricFilter] = useState<string | null>(null);
+  const [activeMetricFilter, setActiveMetricFilter] = useState<string | null>(
+    null,
+  );
   const [copiedCli, setCopiedCli] = useState(false);
 
   const {
@@ -46,11 +50,16 @@ function DashboardContent() {
     }
   }, [actions.length, selectedAction]);
 
-  const agentMessages = events.filter((e) => e.type === 'agent.message');
-  const latestMessage = agentMessages.length > 0 ? (agentMessages[agentMessages.length - 1] as any).content : null;
+  const agentMessages = events.filter((e) => e.type === "agent.message");
+  const latestMessage =
+    agentMessages.length > 0
+      ? (agentMessages[agentMessages.length - 1] as any).content
+      : null;
 
   const handleCopyCli = () => {
-    navigator.clipboard.writeText('npm run cli -- run --task "Inspect this project and run tests"');
+    navigator.clipboard.writeText(
+      'npm run cli -- run --task "Inspect this project and run tests"',
+    );
     setCopiedCli(true);
     setTimeout(() => setCopiedCli(false), 2000);
   };
@@ -71,7 +80,10 @@ function DashboardContent() {
 
       {error && (
         <div className="mx-4 sm:mx-6 mt-3 p-3 rounded bg-rose-50 border border-rose-200 text-rose-900 text-xs flex flex-wrap items-center justify-between gap-2">
-          <span className="font-semibold">⚠️ Backend offline: {error} (Ensure monitor server is running on port 4040)</span>
+          <span className="font-semibold">
+            ⚠️ Backend offline: {error} (Ensure monitor server is running on
+            port 4040)
+          </span>
           <span className="font-mono text-[11px] font-bold text-rose-700 bg-white px-2 py-0.5 rounded border border-rose-200">
             npm run cli -- run
           </span>
@@ -90,6 +102,8 @@ function DashboardContent() {
       {/* Metric summary counters */}
       <MetricCards
         actions={actions}
+        session={session}
+        events={events}
         activeFilter={activeMetricFilter}
         onSelectFilter={setActiveMetricFilter}
       />
@@ -107,7 +121,8 @@ function DashboardContent() {
                 AGENT MONITOR CONTROL PLANE
               </h2>
               <p className="text-xs text-ink-muted mt-1.5 leading-relaxed font-medium">
-                Real-time observability, deterministic policy gates, and human approval for autonomous coding agents.
+                Real-time observability, deterministic policy gates, and human
+                approval for autonomous coding agents.
               </p>
             </div>
 
@@ -121,8 +136,12 @@ function DashboardContent() {
                   onClick={handleCopyCli}
                   className="flex items-center gap-1 text-terracotta hover:text-terracotta-hover font-bold transition-colors"
                 >
-                  {copiedCli ? <Check className="w-3 h-3 text-emerald-600" /> : <Copy className="w-3 h-3" />}
-                  <span>{copiedCli ? 'Copied' : 'Copy'}</span>
+                  {copiedCli ? (
+                    <Check className="w-3 h-3 text-emerald-600" />
+                  ) : (
+                    <Copy className="w-3 h-3" />
+                  )}
+                  <span>{copiedCli ? "Copied" : "Copy"}</span>
                 </button>
               </div>
 
@@ -187,7 +206,9 @@ function DashboardContent() {
                 {latestMessage && (
                   <div className="flex items-center gap-2 bg-alabaster-muted px-3 py-1.5 rounded border border-alabaster-border text-xs max-w-lg truncate shrink-0">
                     <MessageSquare className="w-3.5 h-3.5 text-terracotta shrink-0" />
-                    <span className="text-ink-muted text-[11px] shrink-0 font-bold uppercase">Agent:</span>
+                    <span className="text-ink-muted text-[11px] shrink-0 font-bold uppercase">
+                      Agent:
+                    </span>
                     <span className="text-ink font-mono text-[11px] truncate font-medium">
                       {latestMessage}
                     </span>

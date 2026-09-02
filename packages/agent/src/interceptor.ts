@@ -15,10 +15,11 @@ import {
   RiskAnalyzer,
   PolicyEngine,
   ApprovalRequest,
-} from '@agent-monitor/core';
-import { ToolDefinition, ToolExecutionContext } from './runtime.js';
-import { resolveSafeWorkspacePath } from './tools/guardrails.js';
-import { ApprovalManager } from './approvals/manager.js';
+  TokenUsage,
+} from "@agent-monitor/core";
+import { ToolDefinition, ToolExecutionContext } from "./runtime.js";
+import { resolveSafeWorkspacePath } from "./tools/guardrails.js";
+import { ApprovalManager } from "./approvals/manager.js";
 
 export interface EventSink {
   emit(event: AgentEvent): Promise<void>;
@@ -42,9 +43,9 @@ export class ActionInterceptor {
     sinkOrOptions: EventSink | InterceptorOptions,
     riskAnalyzer: RiskAnalyzer = new RiskAnalyzer(),
     policyEngine: PolicyEngine = new PolicyEngine(),
-    approvalManager?: ApprovalManager
+    approvalManager?: ApprovalManager,
   ) {
-    if ('sink' in sinkOrOptions) {
+    if ("sink" in sinkOrOptions) {
       this.sink = sinkOrOptions.sink;
       this.riskAnalyzer = sinkOrOptions.riskAnalyzer || new RiskAnalyzer();
       this.policyEngine = sinkOrOptions.policyEngine || new PolicyEngine();
@@ -69,33 +70,45 @@ export class ActionInterceptor {
     return this.tools.get(name);
   }
 
-  async emitSessionStarted(event: Omit<SessionStartedEvent, 'id' | 'sequence' | 'type'>): Promise<void> {
+  async emitSessionStarted(
+    event: Omit<SessionStartedEvent, "id" | "sequence" | "type">,
+  ): Promise<void> {
     await this.sink.emit({
       ...event,
-      id: this.generateId('evt'),
+      id: this.generateId("evt"),
       sequence: 0,
-      type: 'session.started',
+      type: "session.started",
     });
   }
 
-  async emitSessionEnded(event: Omit<SessionEndedEvent, 'id' | 'sequence' | 'type'>): Promise<void> {
+  async emitSessionEnded(
+    event: Omit<SessionEndedEvent, "id" | "sequence" | "type">,
+  ): Promise<void> {
     await this.sink.emit({
       ...event,
-      id: this.generateId('evt'),
+      id: this.generateId("evt"),
       sequence: 0,
-      type: 'session.ended',
+      type: "session.ended",
     });
   }
 
-  async emitAgentMessage(sessionId: string, agentId: string, content: string): Promise<void> {
+  async emitAgentMessage(
+    sessionId: string,
+    agentId: string,
+    content: string,
+    usage?: TokenUsage,
+    step?: number,
+  ): Promise<void> {
     const event: AgentMessageEvent = {
-      id: this.generateId('evt'),
+      id: this.generateId("evt"),
       sequence: 0,
       sessionId,
       agentId,
       timestamp: Date.now(),
-      type: 'agent.message',
+      type: "agent.message",
       content,
+      usage,
+      step,
     };
     await this.sink.emit(event);
   }
@@ -109,24 +122,33 @@ export class ActionInterceptor {
    * 3. ASK (approved): policy.evaluated -> approval.requested -> approval.resolved(approved) -> action.started -> tool.execute()
    * 4. ASK (denied/expired): policy.evaluated -> approval.requested -> approval.resolved -> action.blocked (tool never executes)
    */
-  async invoke(toolName: string, rawParams: Record<string, any>, ctx: ToolExecutionContext): Promise<any> {
+  async invoke(
+    toolName: string,
+    rawParams: Record<string, any>,
+    ctx: ToolExecutionContext,
+  ): Promise<any> {
     const tool = this.tools.get(toolName);
     if (!tool) {
       throw new Error(`Tool not found: '${toolName}'`);
     }
 
-    const actionId = this.generateId('act');
+    const actionId = this.generateId("act");
     const startTime = Date.now();
 
     // 1. Guardrails: Check Workspace Boundary
     let isOutsideWorkspace = false;
     if (rawParams.path) {
-      const pathCheck = resolveSafeWorkspacePath(rawParams.path, ctx.workspaceRoot);
+      const pathCheck = resolveSafeWorkspacePath(
+        rawParams.path,
+        ctx.workspaceRoot,
+      );
       isOutsideWorkspace = pathCheck.isOutsideWorkspace;
     }
 
     // 2. Risk Assessment (Pre-execution)
-    const risk = this.riskAnalyzer.analyze(tool.actionKind, rawParams, { isOutsideWorkspace });
+    const risk = this.riskAnalyzer.analyze(tool.actionKind, rawParams, {
+      isOutsideWorkspace,
+    });
 
     // 3. Deterministic Policy Evaluation
     const policyEval = this.policyEngine.evaluate(
@@ -140,17 +162,17 @@ export class ActionInterceptor {
         workspaceRoot: ctx.workspaceRoot,
         agentId: ctx.agentId,
         isOutsideWorkspace,
-      }
+      },
     );
 
     // 4. Emit policy.evaluated Event
     const policyEvent: PolicyEvaluatedEvent = {
-      id: this.generateId('evt'),
+      id: this.generateId("evt"),
       sequence: 0,
       sessionId: ctx.sessionId,
       agentId: ctx.agentId,
       timestamp: Date.now(),
-      type: 'policy.evaluated',
+      type: "policy.evaluated",
       actionId,
       decision: policyEval.decision,
       matchedPolicies: policyEval.matchedPolicies,
@@ -160,14 +182,14 @@ export class ActionInterceptor {
     await this.sink.emit(policyEvent);
 
     // 5. Handle Policy Decisions
-    if (policyEval.decision === 'DENY') {
+    if (policyEval.decision === "DENY") {
       const blockedEvent: ActionBlockedEvent = {
-        id: this.generateId('evt'),
+        id: this.generateId("evt"),
         sequence: 0,
         sessionId: ctx.sessionId,
         agentId: ctx.agentId,
         timestamp: Date.now(),
-        type: 'action.blocked',
+        type: "action.blocked",
         actionId,
         kind: tool.actionKind,
         category: tool.category,
@@ -175,17 +197,19 @@ export class ActionInterceptor {
         reason: policyEval.reason,
         risk,
         policy: {
-          decision: 'DENY',
+          decision: "DENY",
           matchedPolicies: policyEval.matchedPolicies,
           reason: policyEval.reason,
         },
       };
       await this.sink.emit(blockedEvent);
-      throw new Error(`Security Violation: Action '${tool.actionKind}' was blocked by policy: ${policyEval.reason}`);
+      throw new Error(
+        `Security Violation: Action '${tool.actionKind}' was blocked by policy: ${policyEval.reason}`,
+      );
     }
 
-    if (policyEval.decision === 'ASK') {
-      const approvalId = this.generateId('app');
+    if (policyEval.decision === "ASK") {
+      const approvalId = this.generateId("app");
       const approvalRequest: ApprovalRequest = {
         id: approvalId,
         actionId,
@@ -196,7 +220,7 @@ export class ActionInterceptor {
         risk,
         reason: policyEval.reason,
         matchedPolicies: policyEval.matchedPolicies,
-        status: 'pending',
+        status: "pending",
         createdAt: Date.now(),
       };
 
@@ -205,12 +229,12 @@ export class ActionInterceptor {
       }
 
       const reqEvent: ApprovalRequestedEvent = {
-        id: this.generateId('evt'),
+        id: this.generateId("evt"),
         sequence: 0,
         sessionId: ctx.sessionId,
         agentId: ctx.agentId,
         timestamp: Date.now(),
-        type: 'approval.requested',
+        type: "approval.requested",
         approvalId,
         actionId,
         actionKind: tool.actionKind,
@@ -224,18 +248,21 @@ export class ActionInterceptor {
 
       // Genuinely pause and wait for human resolution
       const resolution = this.approvalManager
-        ? await this.approvalManager.waitForResolution(approvalId, this.policyEngine.getTimeoutMs())
-        : { decision: 'denied' as const, resolvedBy: 'no_approval_manager' };
+        ? await this.approvalManager.waitForResolution(
+            approvalId,
+            this.policyEngine.getTimeoutMs(),
+          )
+        : { decision: "denied" as const, resolvedBy: "no_approval_manager" };
 
       // Emit resolved event only if no external manager/server managed the single authoritative emission
       if (!this.approvalManager) {
         const resEvent: ApprovalResolvedEvent = {
-          id: this.generateId('evt'),
+          id: this.generateId("evt"),
           sequence: 0,
           sessionId: ctx.sessionId,
           agentId: ctx.agentId,
           timestamp: Date.now(),
-          type: 'approval.resolved',
+          type: "approval.resolved",
           approvalId,
           actionId,
           decision: resolution.decision,
@@ -244,46 +271,46 @@ export class ActionInterceptor {
         await this.sink.emit(resEvent);
       }
 
-      if (resolution.decision !== 'approved') {
+      if (resolution.decision !== "approved") {
         const blockedEvent: ActionBlockedEvent = {
-          id: this.generateId('evt'),
+          id: this.generateId("evt"),
           sequence: 0,
           sessionId: ctx.sessionId,
           agentId: ctx.agentId,
           timestamp: Date.now(),
-          type: 'action.blocked',
+          type: "action.blocked",
           actionId,
           kind: tool.actionKind,
           category: tool.category,
           params: rawParams,
           reason:
-            resolution.decision === 'expired'
-              ? 'Action blocked: Approval request timed out'
-              : 'Action blocked: Denied by user',
+            resolution.decision === "expired"
+              ? "Action blocked: Approval request timed out"
+              : "Action blocked: Denied by user",
           risk,
           policy: {
-            decision: 'ASK',
+            decision: "ASK",
             matchedPolicies: policyEval.matchedPolicies,
             reason: policyEval.reason,
           },
         };
         await this.sink.emit(blockedEvent);
         throw new Error(
-          resolution.decision === 'expired'
+          resolution.decision === "expired"
             ? `Policy Error: Approval request timed out for '${tool.actionKind}'`
-            : `Policy Error: Action '${tool.actionKind}' was denied by user`
+            : `Policy Error: Action '${tool.actionKind}' was denied by user`,
         );
       }
     }
 
     // 6. Action Execution (Only reached if ALLOW or Approved)
     const startedEvent: ActionStartedEvent = {
-      id: this.generateId('evt'),
+      id: this.generateId("evt"),
       sequence: 0,
       sessionId: ctx.sessionId,
       agentId: ctx.agentId,
       timestamp: startTime,
-      type: 'action.started',
+      type: "action.started",
       actionId,
       kind: tool.actionKind,
       category: tool.category,
@@ -296,24 +323,24 @@ export class ActionInterceptor {
       const result = await tool.execute(rawParams, ctx);
       const durationMs = Date.now() - startTime;
 
-      const metadata: ActionCompletedEvent['metadata'] = {};
-      if (tool.actionKind === 'file.write' && result) {
+      const metadata: ActionCompletedEvent["metadata"] = {};
+      if (tool.actionKind === "file.write" && result) {
         metadata.diff = result.diff;
         metadata.linesChanged = result.linesChanged;
         metadata.bytesProcessed = result.bytesWritten;
-      } else if (tool.actionKind === 'process.exec' && result) {
+      } else if (tool.actionKind === "process.exec" && result) {
         metadata.exitCode = result.exitCode;
-      } else if (tool.actionKind === 'file.read' && result) {
+      } else if (tool.actionKind === "file.read" && result) {
         metadata.bytesProcessed = result.bytesRead;
       }
 
       const completedEvent: ActionCompletedEvent = {
-        id: this.generateId('evt'),
+        id: this.generateId("evt"),
         sequence: 0,
         sessionId: ctx.sessionId,
         agentId: ctx.agentId,
         timestamp: Date.now(),
-        type: 'action.completed',
+        type: "action.completed",
         actionId,
         kind: tool.actionKind,
         category: tool.category,
@@ -330,18 +357,18 @@ export class ActionInterceptor {
       const durationMs = Date.now() - startTime;
 
       const failedEvent: ActionFailedEvent = {
-        id: this.generateId('evt'),
+        id: this.generateId("evt"),
         sequence: 0,
         sessionId: ctx.sessionId,
         agentId: ctx.agentId,
         timestamp: Date.now(),
-        type: 'action.failed',
+        type: "action.failed",
         actionId,
         kind: tool.actionKind,
         category: tool.category,
         params: rawParams,
         error: {
-          message: err.message || 'Tool execution failed',
+          message: err.message || "Tool execution failed",
         },
         durationMs,
         risk,
