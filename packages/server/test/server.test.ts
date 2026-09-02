@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import http from 'node:http';
 import { createDatabase } from '../src/db/database.js';
 import { SessionRepository } from '../src/db/repository.js';
 import { EventBus } from '../src/bus.js';
@@ -11,6 +12,7 @@ describe('Server & SQLite persistence', () => {
   let bus: EventBus;
   let server: MonitorServer;
   let serverUrl: string;
+  let serverPort: number;
 
   beforeEach(async () => {
     db = createDatabase(':memory:');
@@ -18,6 +20,7 @@ describe('Server & SQLite persistence', () => {
     bus = new EventBus();
     server = new MonitorServer({ repository: repo, eventBus: bus, port: 0 });
     const { port } = await server.start();
+    serverPort = port;
     serverUrl = `http://127.0.0.1:${port}`;
   });
 
@@ -143,5 +146,58 @@ describe('Server & SQLite persistence', () => {
     const eventsData = await resEvents.json();
     expect(eventsData.events.length).toBe(1);
     expect(eventsData.events[0].actionId).toBe('act_http_1');
+  });
+
+  it('streams real-time events over SSE and supports reconnect catch-up', async () => {
+    const session: AgentSession = {
+      id: 'ses_sse_test',
+      agentId: 'deepseek-coder',
+      agentName: 'DeepSeek Agent',
+      provider: 'deepseek',
+      model: 'deepseek-coder',
+      workspaceRoot: '/tmp',
+      task: 'SSE test',
+      startedAt: Date.now(),
+      status: 'running',
+      riskScore: 0,
+    };
+    repo.createSession(session);
+
+    // Initial event persisted in SQLite
+    repo.insertEvent({
+      id: 'evt_init',
+      sequence: 1,
+      sessionId: 'ses_sse_test',
+      agentId: 'deepseek-coder',
+      timestamp: Date.now(),
+      type: 'action.started',
+      actionId: 'act_init',
+      kind: 'file.read',
+      category: 'file',
+      params: { path: 'a.txt' },
+      risk: { score: 0, level: 'NONE', flags: [] },
+    });
+
+    const sseChunks: string[] = [];
+    await new Promise<void>((resolve) => {
+      const req = http.get(
+        `http://127.0.0.1:${serverPort}/events/stream?sessionId=ses_sse_test&afterSeq=0`,
+        (res) => {
+          res.on('data', (chunk) => {
+            const str = chunk.toString();
+            sseChunks.push(str);
+            if (str.includes('file.read')) {
+              res.destroy();
+              req.destroy();
+              resolve();
+            }
+          });
+        }
+      );
+    });
+
+    const combinedOutput = sseChunks.join('');
+    expect(combinedOutput).toContain('connected');
+    expect(combinedOutput).toContain('file.read');
   });
 });

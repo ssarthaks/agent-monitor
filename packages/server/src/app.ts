@@ -165,9 +165,10 @@ export class MonitorServer {
         res.write(`: connected\n\n`);
 
         const lastEventId = req.headers['last-event-id'];
-        const afterSeq = Number(lastEventId || parsedUrl.searchParams.get('afterSeq')) || 0;
+        const afterSeqParam = parsedUrl.searchParams.get('afterSeq');
 
-        if (afterSeq > 0) {
+        if (lastEventId !== undefined || afterSeqParam !== null) {
+          const afterSeq = Number(lastEventId || afterSeqParam) || 0;
           const missedEvents = this.repository.getEventsBySession(sessionId, afterSeq);
           for (const ev of missedEvents) {
             res.write(`id: ${ev.sequence}\nevent: ${ev.type}\ndata: ${JSON.stringify(ev)}\n\n`);

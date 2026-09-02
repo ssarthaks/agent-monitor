@@ -73,6 +73,19 @@ describe('Agent Tools & Security Guardrails', () => {
     expect(res.timedOut).toBe(false);
   });
 
+  it('handles command failure with non-zero exit code', async () => {
+    const res = await runCommandTool.execute({ command: 'exit 42' }, ctx);
+    expect(res.exitCode).toBe(42);
+    expect(res.timedOut).toBe(false);
+  });
+
+  it('kills and flags command that exceeds timeout', async () => {
+    const res = await runCommandTool.execute({ command: 'sleep 2', timeoutMs: 150 }, ctx);
+    expect(res.timedOut).toBe(true);
+    expect(res.exitCode).toBe(124);
+    expect(res.stderr).toContain('timed out');
+  });
+
   it('blocks path traversal outside workspace', async () => {
     const traversalCheck = resolveSafeWorkspacePath('../../etc/passwd', tmpDir);
     expect(traversalCheck.isOutsideWorkspace).toBe(true);
@@ -80,5 +93,12 @@ describe('Agent Tools & Security Guardrails', () => {
     await expect(
       readFileTool.execute({ path: '../../etc/passwd' }, ctx)
     ).rejects.toThrow(/Security Violation/);
+  });
+
+  it('rejects file writes exceeding 2MB limit', async () => {
+    const largeContent = 'A'.repeat(2.5 * 1024 * 1024);
+    await expect(
+      writeFileTool.execute({ path: 'large.txt', content: largeContent }, ctx)
+    ).rejects.toThrow(/exceeds maximum size/);
   });
 });
