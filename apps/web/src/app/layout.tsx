@@ -3,7 +3,7 @@ import './globals.css';
 
 export const metadata: Metadata = {
   title: 'Agent Monitor — Activity Monitor & Control Plane for AI Agents',
-  description: 'Pure, real-time observability, action timeline, diff inspection, and deterministic risk control plane for AI agents',
+  description: 'Pure real-time observability, action timeline, diff inspection, and deterministic risk control plane for AI agents',
 };
 
 export default function RootLayout({
@@ -13,7 +13,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body className="bg-white text-charcoal min-h-screen antialiased">
+      <body className="bg-alabaster text-ink min-h-screen antialiased selection:bg-terracotta selection:text-white">
         {children}
       </body>
     </html>

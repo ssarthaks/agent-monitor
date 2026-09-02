@@ -9,26 +9,26 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        base: "#ffffff",
-        charcoal: {
-          DEFAULT: "#121212",
-          surface: "#1a1a1a",
-          subtle: "#262626",
-          muted: "#595959",
-          faint: "#8c8c8c",
+        alabaster: {
+          DEFAULT: "#FAFAFA",
+          surface: "#FFFFFF",
+          muted: "#F4F4F6",
+          elevated: "#EEEEF1",
+          border: "#E2E4E9",
+          borderDark: "#D0D3DB",
         },
-        tangerine: {
-          DEFAULT: "#ff5a00",
-          hover: "#e04f00",
-          light: "#fff5f0",
-          border: "#ffd2be",
+        ink: {
+          DEFAULT: "#2B2D42",
+          dark: "#202232",
+          surface: "#353852",
+          muted: "#5D617A",
+          faint: "#8D92A8",
         },
-        surface: {
-          DEFAULT: "#ffffff",
-          muted: "#f9fafb",
-          elevated: "#f3f4f6",
-          border: "#e5e7eb",
-          dark: "#121212",
+        terracotta: {
+          DEFAULT: "#D46A43",
+          hover: "#E27D60",
+          light: "#FDF3EF",
+          border: "#F7CABA",
         },
       },
       fontFamily: {

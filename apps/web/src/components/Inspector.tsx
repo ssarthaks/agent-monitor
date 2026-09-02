@@ -31,12 +31,12 @@ export function Inspector({ action }: InspectorProps) {
 
   if (!action) {
     return (
-      <div className="flex flex-col items-center justify-center h-full bg-white rounded border border-surface-border p-8 text-center text-charcoal-muted shadow-xs">
-        <div className="w-12 h-12 rounded bg-surface-muted flex items-center justify-center mb-3 border border-surface-border">
-          <Layers className="w-6 h-6 text-charcoal stroke-[1.5]" />
+      <div className="flex flex-col items-center justify-center h-full bg-white rounded border border-alabaster-border p-8 text-center text-ink-muted">
+        <div className="w-12 h-12 rounded bg-alabaster-muted flex items-center justify-center mb-3 border border-alabaster-border">
+          <Layers className="w-6 h-6 text-ink stroke-[1.5]" />
         </div>
-        <p className="text-sm font-bold text-charcoal uppercase tracking-wide">Action Inspector</p>
-        <p className="text-xs text-charcoal-muted mt-1 max-w-xs leading-relaxed font-medium">
+        <p className="text-sm font-bold text-ink uppercase tracking-wide">Action Inspector</p>
+        <p className="text-xs text-ink-muted mt-1 max-w-xs leading-relaxed font-medium">
           Select any action from the activity timeline to inspect file diffs, command executions, parameters, and risk details.
         </p>
       </div>
@@ -46,7 +46,7 @@ export function Inspector({ action }: InspectorProps) {
   const renderDiff = (diffText?: string) => {
     if (!diffText) {
       return (
-        <div className="p-6 text-center text-xs text-charcoal-muted font-mono bg-surface-muted rounded border border-surface-border">
+        <div className="p-6 text-center text-xs text-ink-muted font-mono bg-alabaster-muted rounded border border-alabaster-border">
           No diff available for this write operation.
         </div>
       );
@@ -56,21 +56,21 @@ export function Inspector({ action }: InspectorProps) {
     return (
       <div className="space-y-2">
         <div className="flex items-center justify-between pb-1">
-          <div className="flex items-center gap-2 text-xs font-mono text-charcoal font-semibold">
+          <div className="flex items-center gap-2 text-xs font-mono text-ink font-semibold">
             <span className="text-emerald-700 font-bold">+{lines.filter(l => l.startsWith('+') && !l.startsWith('+++')).length}</span>
             <span className="text-rose-700 font-bold">-{lines.filter(l => l.startsWith('-') && !l.startsWith('---')).length}</span>
-            <span className="text-charcoal-muted font-normal">lines changed</span>
+            <span className="text-ink-muted font-normal">lines changed</span>
           </div>
           <button
             onClick={() => handleCopy(diffText, 'diff')}
-            className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-white hover:bg-surface-muted text-charcoal text-[11px] font-mono font-semibold border border-surface-border transition-colors shadow-xs"
+            className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-white hover:bg-alabaster-muted text-ink text-[11px] font-mono font-semibold border border-alabaster-border transition-colors"
           >
-            {copiedSection === 'diff' ? <Check className="w-3 h-3 text-emerald-600" /> : <Copy className="w-3 h-3 text-charcoal-muted" />}
+            {copiedSection === 'diff' ? <Check className="w-3 h-3 text-emerald-600" /> : <Copy className="w-3 h-3 text-ink-muted" />}
             <span>Copy Diff</span>
           </button>
         </div>
 
-        <div className="font-mono text-xs overflow-x-auto bg-charcoal p-3.5 rounded border border-charcoal text-slate-200">
+        <div className="font-mono text-xs overflow-x-auto bg-ink p-3.5 rounded border border-ink text-slate-200">
           {lines.map((line, idx) => {
             let lineClass = 'text-slate-300';
             let bgClass = '';
@@ -81,13 +81,13 @@ export function Inspector({ action }: InspectorProps) {
               lineClass = 'text-rose-300 font-medium';
               bgClass = 'bg-rose-950/40 -mx-3.5 px-3.5 border-l-2 border-rose-400';
             } else if (line.startsWith('@@')) {
-              lineClass = 'text-tangerine font-semibold';
-              bgClass = 'bg-charcoal-surface -mx-3.5 px-3.5';
+              lineClass = 'text-terracotta-hover font-semibold';
+              bgClass = 'bg-ink-dark -mx-3.5 px-3.5';
             }
 
             return (
               <div key={idx} className={`py-0.5 flex gap-3 text-[11px] leading-5 ${bgClass}`}>
-                <span className="text-slate-600 select-none w-6 text-right shrink-0 font-mono">
+                <span className="text-slate-500 select-none w-6 text-right shrink-0 font-mono">
                   {idx + 1}
                 </span>
                 <span className={`${lineClass} whitespace-pre`}>{line}</span>
@@ -108,18 +108,18 @@ export function Inspector({ action }: InspectorProps) {
     return (
       <div className="space-y-3 font-mono text-xs">
         {/* Command bar */}
-        <div className="bg-surface-muted px-3.5 py-2 rounded border border-surface-border flex items-center justify-between gap-3">
-          <div className="flex items-center gap-2 text-charcoal font-bold truncate">
-            <span className="text-tangerine font-black">$</span>
+        <div className="bg-alabaster-muted px-3.5 py-2 rounded border border-alabaster-border flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2 text-ink font-bold truncate">
+            <span className="text-terracotta font-black">$</span>
             <span className="truncate">{command}</span>
           </div>
           <div className="flex items-center gap-2 shrink-0">
             <button
               onClick={() => handleCopy(command, 'cmd')}
-              className="p-1 rounded bg-white hover:bg-surface-muted text-charcoal border border-surface-border transition-colors shadow-xs"
+              className="p-1 rounded bg-white hover:bg-alabaster-muted text-ink border border-alabaster-border transition-colors"
               title="Copy Command"
             >
-              {copiedSection === 'cmd' ? <Check className="w-3 h-3 text-emerald-600" /> : <Copy className="w-3 h-3 text-charcoal-muted" />}
+              {copiedSection === 'cmd' ? <Check className="w-3 h-3 text-emerald-600" /> : <Copy className="w-3 h-3 text-ink-muted" />}
             </button>
             <span
               className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${
@@ -134,11 +134,11 @@ export function Inspector({ action }: InspectorProps) {
         </div>
 
         {/* Output console */}
-        <div className="bg-charcoal p-3.5 rounded border border-charcoal text-slate-200 overflow-x-auto max-h-96 whitespace-pre-wrap font-mono text-xs">
+        <div className="bg-ink p-3.5 rounded border border-ink text-slate-200 overflow-x-auto max-h-96 whitespace-pre-wrap font-mono text-xs">
           {stdout && <div className="text-emerald-300 leading-relaxed">{stdout}</div>}
           {stderr && <div className="text-rose-300 mt-2 leading-relaxed">{stderr}</div>}
           {!stdout && !stderr && (
-            <div className="text-slate-500 italic">No output produced by this command.</div>
+            <div className="text-slate-400 italic">No output produced by this command.</div>
           )}
         </div>
       </div>
@@ -146,26 +146,26 @@ export function Inspector({ action }: InspectorProps) {
   };
 
   return (
-    <div className="flex flex-col h-full bg-white rounded border border-surface-border overflow-hidden shadow-xs">
+    <div className="flex flex-col h-full bg-white rounded border border-alabaster-border overflow-hidden">
       {/* Top action info bar */}
-      <div className="px-4 py-3 border-b border-surface-border flex flex-wrap items-center justify-between gap-3 bg-surface-muted">
+      <div className="px-4 py-3 border-b border-alabaster-border flex flex-wrap items-center justify-between gap-3 bg-alabaster-muted">
         <div className="flex items-center gap-2.5">
-          <span className="text-xs font-black uppercase tracking-wider text-charcoal">
+          <span className="text-xs font-black uppercase tracking-wider text-ink">
             {action.kind}
           </span>
-          <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-white text-charcoal-muted border border-surface-border font-bold">
+          <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-white text-ink-muted border border-alabaster-border font-bold">
             {action.actionId}
           </span>
         </div>
 
         {/* Navigation Tabs */}
-        <div className="flex items-center gap-1 bg-white p-0.5 rounded border border-surface-border text-xs">
+        <div className="flex items-center gap-1 bg-white p-0.5 rounded border border-alabaster-border text-xs">
           <button
             onClick={() => setActiveTab('preview')}
             className={`px-2.5 py-1 rounded text-[11px] font-bold uppercase tracking-wider transition-colors ${
               activeTab === 'preview'
-                ? 'bg-charcoal text-white'
-                : 'text-charcoal-muted hover:text-charcoal hover:bg-surface-muted'
+                ? 'bg-ink text-white'
+                : 'text-ink-muted hover:text-ink hover:bg-alabaster-muted'
             }`}
           >
             Output / Diff
@@ -174,8 +174,8 @@ export function Inspector({ action }: InspectorProps) {
             onClick={() => setActiveTab('params')}
             className={`px-2.5 py-1 rounded text-[11px] font-bold uppercase tracking-wider transition-colors ${
               activeTab === 'params'
-                ? 'bg-charcoal text-white'
-                : 'text-charcoal-muted hover:text-charcoal hover:bg-surface-muted'
+                ? 'bg-ink text-white'
+                : 'text-ink-muted hover:text-ink hover:bg-alabaster-muted'
             }`}
           >
             Params
@@ -185,8 +185,8 @@ export function Inspector({ action }: InspectorProps) {
               onClick={() => setActiveTab('risk')}
               className={`px-2.5 py-1 rounded text-[11px] font-bold uppercase tracking-wider transition-colors flex items-center gap-1 ${
                 activeTab === 'risk'
-                  ? 'bg-tangerine text-white'
-                  : 'text-tangerine hover:bg-tangerine-light'
+                  ? 'bg-terracotta text-white'
+                  : 'text-terracotta hover:bg-terracotta-light'
               }`}
             >
               <ShieldAlert className="w-3 h-3" />
@@ -197,8 +197,8 @@ export function Inspector({ action }: InspectorProps) {
             onClick={() => setActiveTab('raw')}
             className={`px-2.5 py-1 rounded text-[11px] font-bold uppercase tracking-wider transition-colors flex items-center gap-1 ${
               activeTab === 'raw'
-                ? 'bg-charcoal text-white'
-                : 'text-charcoal-muted hover:text-charcoal hover:bg-surface-muted'
+                ? 'bg-ink text-white'
+                : 'text-ink-muted hover:text-ink hover:bg-alabaster-muted'
             }`}
           >
             <Code className="w-3 h-3" />
@@ -211,16 +211,16 @@ export function Inspector({ action }: InspectorProps) {
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
         {/* Risk Warning Alert */}
         {action.risk && action.risk.flags.length > 0 && activeTab !== 'risk' && (
-          <div className="p-3 rounded bg-tangerine-light border border-tangerine-border flex items-center justify-between gap-3 text-xs">
-            <div className="flex items-center gap-2 font-semibold text-charcoal">
-              <ShieldAlert className="w-4 h-4 text-tangerine shrink-0" />
+          <div className="p-3 rounded bg-terracotta-light border border-terracotta-border flex items-center justify-between gap-3 text-xs">
+            <div className="flex items-center gap-2 font-semibold text-ink">
+              <ShieldAlert className="w-4 h-4 text-terracotta shrink-0" />
               <span>
                 Risk Score: <strong>{action.risk.score}/100</strong> ({action.risk.level}) — {action.risk.flags[0].description}
               </span>
             </div>
             <button
               onClick={() => setActiveTab('risk')}
-              className="text-[11px] font-bold text-tangerine underline shrink-0 hover:text-tangerine-hover"
+              className="text-[11px] font-bold text-terracotta underline shrink-0 hover:text-terracotta-hover"
             >
               Inspect Risk
             </button>
@@ -255,11 +255,11 @@ export function Inspector({ action }: InspectorProps) {
             {action.kind === 'file.write' && (
               <div>
                 <div className="flex items-center justify-between mb-2">
-                  <h3 className="text-xs font-bold text-charcoal uppercase tracking-wider flex items-center gap-1.5">
-                    <FileCode className="w-3.5 h-3.5 text-tangerine" />
+                  <h3 className="text-xs font-bold text-ink uppercase tracking-wider flex items-center gap-1.5">
+                    <FileCode className="w-3.5 h-3.5 text-terracotta" />
                     <span>File Modification Diff</span>
                   </h3>
-                  <span className="text-[11px] font-mono font-semibold text-charcoal-muted">{action.params.path}</span>
+                  <span className="text-[11px] font-mono font-semibold text-ink-muted">{action.params.path}</span>
                 </div>
                 {renderDiff(action.metadata?.diff || action.result?.diff)}
               </div>
@@ -267,8 +267,8 @@ export function Inspector({ action }: InspectorProps) {
 
             {action.kind === 'process.exec' && (
               <div>
-                <h3 className="text-xs font-bold text-charcoal uppercase tracking-wider mb-2 flex items-center gap-1.5">
-                  <Terminal className="w-3.5 h-3.5 text-tangerine" />
+                <h3 className="text-xs font-bold text-ink uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                  <Terminal className="w-3.5 h-3.5 text-terracotta" />
                   <span>Shell Command Execution</span>
                 </h3>
                 {renderTerminal(action.result)}
@@ -278,14 +278,14 @@ export function Inspector({ action }: InspectorProps) {
             {action.kind === 'file.read' && (
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
-                  <h3 className="text-xs font-bold text-charcoal uppercase tracking-wider flex items-center gap-1.5">
-                    <FileText className="w-3.5 h-3.5 text-charcoal" />
+                  <h3 className="text-xs font-bold text-ink uppercase tracking-wider flex items-center gap-1.5">
+                    <FileText className="w-3.5 h-3.5 text-ink" />
                     <span>File Content Preview</span>
                   </h3>
-                  <span className="text-[11px] font-mono font-semibold text-charcoal-muted">{action.params.path}</span>
+                  <span className="text-[11px] font-mono font-semibold text-ink-muted">{action.params.path}</span>
                 </div>
                 {action.result && (
-                  <div className="font-mono text-xs bg-charcoal p-3.5 rounded border border-charcoal text-slate-200 overflow-x-auto max-h-96 whitespace-pre-wrap leading-relaxed">
+                  <div className="font-mono text-xs bg-ink p-3.5 rounded border border-ink text-slate-200 overflow-x-auto max-h-96 whitespace-pre-wrap leading-relaxed">
                     {action.result.content}
                   </div>
                 )}
@@ -295,17 +295,17 @@ export function Inspector({ action }: InspectorProps) {
             {action.kind === 'file.list' && (
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
-                  <h3 className="text-xs font-bold text-charcoal uppercase tracking-wider flex items-center gap-1.5">
-                    <FolderOpen className="w-3.5 h-3.5 text-tangerine" />
+                  <h3 className="text-xs font-bold text-ink uppercase tracking-wider flex items-center gap-1.5">
+                    <FolderOpen className="w-3.5 h-3.5 text-terracotta" />
                     <span>Directory Entries ({action.result?.totalCount || 0})</span>
                   </h3>
                 </div>
                 {action.result?.entries && (
-                  <div className="bg-white rounded border border-surface-border max-h-80 overflow-y-auto divide-y divide-surface-border font-mono text-xs">
+                  <div className="bg-white rounded border border-alabaster-border max-h-80 overflow-y-auto divide-y divide-alabaster-border font-mono text-xs">
                     {action.result.entries.map((entry: any, i: number) => (
-                      <div key={i} className="py-2 px-3 flex items-center justify-between text-charcoal hover:bg-surface-muted">
-                        <span className="font-medium text-charcoal">{entry.path}</span>
-                        <span className="text-[10px] text-charcoal-muted uppercase font-bold bg-surface-muted px-1.5 py-0.5 rounded border border-surface-border">
+                      <div key={i} className="py-2 px-3 flex items-center justify-between text-ink hover:bg-alabaster-muted">
+                        <span className="font-medium text-ink">{entry.path}</span>
+                        <span className="text-[10px] text-ink-muted uppercase font-bold bg-alabaster-muted px-1.5 py-0.5 rounded border border-alabaster-border">
                           {entry.type}
                         </span>
                       </div>
@@ -321,20 +321,20 @@ export function Inspector({ action }: InspectorProps) {
         {activeTab === 'params' && (
           <div className="space-y-4">
             <div>
-              <h4 className="text-xs font-bold text-charcoal uppercase tracking-wider mb-1.5">
+              <h4 className="text-xs font-bold text-ink uppercase tracking-wider mb-1.5">
                 Input Parameters
               </h4>
-              <pre className="font-mono text-xs bg-charcoal p-3.5 rounded border border-charcoal text-slate-200 overflow-x-auto">
+              <pre className="font-mono text-xs bg-ink p-3.5 rounded border border-ink text-slate-200 overflow-x-auto">
                 {JSON.stringify(action.params, null, 2)}
               </pre>
             </div>
 
             {action.result && (
               <div>
-                <h4 className="text-xs font-bold text-charcoal uppercase tracking-wider mb-1.5">
+                <h4 className="text-xs font-bold text-ink uppercase tracking-wider mb-1.5">
                   Execution Result
                 </h4>
-                <pre className="font-mono text-xs bg-charcoal p-3.5 rounded border border-charcoal text-emerald-300 overflow-x-auto">
+                <pre className="font-mono text-xs bg-ink p-3.5 rounded border border-ink text-emerald-300 overflow-x-auto">
                   {JSON.stringify(action.result, null, 2)}
                 </pre>
               </div>
@@ -345,10 +345,10 @@ export function Inspector({ action }: InspectorProps) {
         {/* TAB 3: Security Risk Details */}
         {activeTab === 'risk' && action.risk && (
           <div className="space-y-4">
-            <div className="p-4 rounded bg-surface-muted border border-surface-border flex items-center justify-between">
+            <div className="p-4 rounded bg-alabaster-muted border border-alabaster-border flex items-center justify-between">
               <div>
-                <span className="text-xs font-bold text-charcoal-muted uppercase tracking-wider">Overall Risk Assessment</span>
-                <p className="text-2xl font-black text-charcoal font-mono mt-0.5">
+                <span className="text-xs font-bold text-ink-muted uppercase tracking-wider">Overall Risk Assessment</span>
+                <p className="text-2xl font-black text-ink font-mono mt-0.5">
                   {action.risk.score} / 100
                 </p>
               </div>
@@ -357,7 +357,7 @@ export function Inspector({ action }: InspectorProps) {
                   action.risk.level === 'CRITICAL'
                     ? 'bg-rose-100 text-rose-800 border border-rose-200'
                     : action.risk.level === 'HIGH'
-                    ? 'bg-tangerine-light text-tangerine border border-tangerine-border'
+                    ? 'bg-terracotta-light text-terracotta border border-terracotta-border'
                     : 'bg-amber-100 text-amber-800 border border-amber-200'
                 }`}
               >
@@ -366,22 +366,22 @@ export function Inspector({ action }: InspectorProps) {
             </div>
 
             <div className="space-y-2">
-              <h4 className="text-xs font-bold text-charcoal uppercase tracking-wider">
+              <h4 className="text-xs font-bold text-ink uppercase tracking-wider">
                 Triggered Rules ({action.risk.flags.length})
               </h4>
               {action.risk.flags.map((flag, idx) => (
                 <div
                   key={idx}
-                  className="p-3.5 rounded bg-white border border-surface-border flex items-start justify-between gap-3 text-xs shadow-xs"
+                  className="p-3.5 rounded bg-white border border-alabaster-border flex items-start justify-between gap-3 text-xs"
                 >
                   <div>
                     <div className="flex items-center gap-2">
-                      <span className="font-mono text-tangerine font-bold">[{flag.ruleId}]</span>
-                      <span className="font-bold text-charcoal">{flag.description}</span>
+                      <span className="font-mono text-terracotta font-bold">[{flag.ruleId}]</span>
+                      <span className="font-bold text-ink">{flag.description}</span>
                     </div>
-                    <p className="text-[11px] text-charcoal-muted mt-1 font-medium">Severity: {flag.severity}</p>
+                    <p className="text-[11px] text-ink-muted mt-1 font-medium">Severity: {flag.severity}</p>
                   </div>
-                  <span className="px-2 py-0.5 rounded font-mono font-black text-[11px] text-tangerine bg-tangerine-light border border-tangerine-border shrink-0">
+                  <span className="px-2 py-0.5 rounded font-mono font-black text-[11px] text-terracotta bg-terracotta-light border border-terracotta-border shrink-0">
                     +{flag.scoreImpact} PTS
                   </span>
                 </div>
@@ -394,18 +394,18 @@ export function Inspector({ action }: InspectorProps) {
         {activeTab === 'raw' && (
           <div className="space-y-2">
             <div className="flex items-center justify-between">
-              <span className="text-xs font-bold text-charcoal uppercase tracking-wider">
+              <span className="text-xs font-bold text-ink uppercase tracking-wider">
                 Raw Event JSON
               </span>
               <button
                 onClick={() => handleCopy(JSON.stringify(action, null, 2), 'raw')}
-                className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-white hover:bg-surface-muted text-charcoal text-[11px] font-mono font-bold border border-surface-border transition-colors shadow-xs"
+                className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-white hover:bg-alabaster-muted text-ink text-[11px] font-mono font-bold border border-alabaster-border transition-colors"
               >
-                {copiedSection === 'raw' ? <Check className="w-3 h-3 text-emerald-600" /> : <Copy className="w-3 h-3 text-charcoal-muted" />}
+                {copiedSection === 'raw' ? <Check className="w-3 h-3 text-emerald-600" /> : <Copy className="w-3 h-3 text-ink-muted" />}
                 <span>Copy JSON</span>
               </button>
             </div>
-            <pre className="font-mono text-xs bg-charcoal p-3.5 rounded border border-charcoal text-slate-200 overflow-x-auto whitespace-pre-wrap leading-relaxed">
+            <pre className="font-mono text-xs bg-ink p-3.5 rounded border border-ink text-slate-200 overflow-x-auto whitespace-pre-wrap leading-relaxed">
               {JSON.stringify(action, null, 2)}
             </pre>
           </div>
