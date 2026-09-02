@@ -96,14 +96,27 @@ export async function runAgentCommand(options: RunCommandOptions): Promise<void>
   const repository = new SessionRepository(db);
   const eventBus = new EventBus();
 
-  // 2. Start Monitor Server
-  const server = new MonitorServer({
-    port: serverPort,
-    repository,
-    eventBus,
-  });
-  const { port: actualPort } = await server.start();
-  const serverUrl = `http://127.0.0.1:${actualPort}`;
+  // 2. Start Monitor Server or reuse running server if EADDRINUSE
+  let server: MonitorServer | null = null;
+  let serverUrl = `http://127.0.0.1:${serverPort}`;
+
+  try {
+    server = new MonitorServer({
+      port: serverPort,
+      repository,
+      eventBus,
+    });
+    const { port: actualPort } = await server.start();
+    serverUrl = `http://127.0.0.1:${actualPort}`;
+  } catch (err: any) {
+    if (err.code === 'EADDRINUSE') {
+      // Existing server is already running on this port - reuse it!
+      server = null;
+    } else {
+      throw err;
+    }
+  }
+
   const dashboardUrl = `http://localhost:${webPort}?sessionId=`;
 
   const sessionId = `ses_${Date.now().toString(36)}_${Math.random().toString(36).substring(2, 7)}`;
@@ -233,7 +246,7 @@ export async function runAgentCommand(options: RunCommandOptions): Promise<void>
 
   printSummaryBanner(summary, durationMs);
 
-  if (options.keepAlive) {
+  if (server && options.keepAlive) {
     console.log(pc.bold(pc.cyan(`  ● Monitor server running at: ${pc.underline(serverUrl)}`)));
     console.log(pc.bold(pc.cyan(`  ● Open Dashboard at:         ${pc.underline(`${dashboardUrl}${sessionId}`)}`)));
     console.log(pc.dim('  Press Ctrl+C to stop the server.\n'));
@@ -243,6 +256,8 @@ export async function runAgentCommand(options: RunCommandOptions): Promise<void>
     });
   }
 
-  await server.stop();
+  if (server) {
+    await server.stop();
+  }
   db.close();
 }
