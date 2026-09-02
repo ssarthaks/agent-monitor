@@ -2,11 +2,11 @@
 
 import React, { useState, useEffect, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { useSessionStream, ActionItem } from '../hooks/useSessionStream.js';
-import { Header } from '../components/Header.js';
-import { MetricCards } from '../components/MetricCards.js';
-import { Timeline } from '../components/Timeline.js';
-import { Inspector } from '../components/Inspector.js';
+import { useSessionStream, ActionItem } from '@/hooks/useSessionStream';
+import { Header } from '@/components/Header';
+import { MetricCards } from '@/components/MetricCards';
+import { Timeline } from '@/components/Timeline';
+import { Inspector } from '@/components/Inspector';
 import { MessageSquare, Bot } from 'lucide-react';
 
 function DashboardContent() {
@@ -29,7 +29,7 @@ function DashboardContent() {
     if (!selectedAction && actions.length > 0) {
       setSelectedAction(actions[actions.length - 1]);
     }
-  }, [actions.length]);
+  }, [actions.length, selectedAction]);
 
   const agentMessages = events.filter((e) => e.type === 'agent.message');
 

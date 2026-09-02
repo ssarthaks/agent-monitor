@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { ActionItem } from '../hooks/useSessionStream.js';
+import { ActionItem } from '@/hooks/useSessionStream';
 import {
   FileText,
   FileEdit,
