@@ -1,6 +1,6 @@
 {
   "name": "@agent-monitor/cli",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "description": "CLI binary and orchestration runner for Agent Monitor",
   "type": "module",
   "bin": {
@@ -25,9 +25,9 @@
     "dev": "tsx src/index.ts"
   },
   "dependencies": {
-    "@agent-monitor/agent": "^0.1.3",
-    "@agent-monitor/core": "^0.1.3",
-    "@agent-monitor/server": "^0.1.3",
+    "@agent-monitor/agent": "^0.1.4",
+    "@agent-monitor/core": "^0.1.4",
+    "@agent-monitor/server": "^0.1.4",
     "commander": "^12.1.0",
     "picocolors": "^1.1.1"
   },

@@ -1,6 +1,6 @@
 {
   "name": "agent-monitor-monorepo",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "private": true,
   "description": "Agent Monitor - Chrome DevTools / Activity Monitor for AI Agents",
   "workspaces": [

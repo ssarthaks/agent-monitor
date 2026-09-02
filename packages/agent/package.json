@@ -1,6 +1,6 @@
 {
   "name": "@agent-monitor/agent",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "description": "Safe tools, security guardrails, ActionInterceptor, and DeepSeek coding agent for Agent Monitor",
   "type": "module",
   "main": "./dist/index.js",
@@ -24,7 +24,7 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@agent-monitor/core": "^0.1.3",
+    "@agent-monitor/core": "^0.1.4",
     "diff": "^7.0.0"
   },
   "devDependencies": {
