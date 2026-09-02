@@ -1,6 +1,6 @@
 {
   "name": "agent-monitor-monorepo",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "description": "Agent Monitor - Chrome DevTools / Activity Monitor for AI Agents",
   "workspaces": [
@@ -11,7 +11,8 @@
     "build": "npm run build --workspaces --if-present",
     "test": "vitest run",
     "dev:web": "npm run dev --workspace=apps/web",
-    "cli": "tsx packages/cli/src/index.ts"
+    "cli": "tsx packages/cli/src/index.ts",
+    "publish:packages": "npm publish --workspace=@agent-monitor/core --workspace=@agent-monitor/server --workspace=@agent-monitor/agent --workspace=@agent-monitor/cli --access public"
   },
   "devDependencies": {
     "@types/node": "^20.17.0",
