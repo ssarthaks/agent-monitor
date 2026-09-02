@@ -1,9 +1,9 @@
 export interface ChatMessage {
-  role: 'system' | 'user' | 'assistant' | 'tool';
+  role: "system" | "user" | "assistant" | "tool";
   content?: string | null;
   tool_calls?: Array<{
     id: string;
-    type: 'function';
+    type: "function";
     function: {
       name: string;
       arguments: string;
@@ -16,7 +16,7 @@ export interface ChatCompletionRequest {
   model: string;
   messages: ChatMessage[];
   tools?: Array<{
-    type: 'function';
+    type: "function";
     function: {
       name: string;
       description: string;
@@ -44,23 +44,34 @@ export class DeepSeekClient {
   private apiKey: string;
   private baseUrl: string;
 
-  constructor(apiKey?: string, baseUrl: string = 'https://api.deepseek.com') {
-    this.apiKey = apiKey || process.env.DEEPSEEK_API_KEY || '';
-    this.baseUrl = baseUrl.replace(/\/+$/, '');
+  constructor(apiKey?: string, baseUrl: string = "https://api.deepseek.com") {
+    const envApiKey =
+      typeof globalThis !== "undefined" && "process" in globalThis
+        ? (
+            globalThis as typeof globalThis & {
+              process?: { env?: Record<string, string | undefined> };
+            }
+          ).process?.env?.DEEPSEEK_API_KEY
+        : undefined;
+
+    this.apiKey = apiKey || envApiKey || "";
+    this.baseUrl = baseUrl.replace(/\/+$/, "");
   }
 
-  async createChatCompletion(request: ChatCompletionRequest): Promise<ChatCompletionResponse> {
+  async createChatCompletion(
+    request: ChatCompletionRequest,
+  ): Promise<ChatCompletionResponse> {
     if (!this.apiKey) {
       throw new Error(
-        'DeepSeek API key is missing. Please set the DEEPSEEK_API_KEY environment variable.'
+        "DeepSeek API key is missing. Please set the DEEPSEEK_API_KEY environment variable.",
       );
     }
 
     const endpoint = `${this.baseUrl}/v1/chat/completions`;
     const res = await fetch(endpoint, {
-      method: 'POST',
+      method: "POST",
       headers: {
-        'Content-Type': 'application/json',
+        "Content-Type": "application/json",
         Authorization: `Bearer ${this.apiKey}`,
       },
       body: JSON.stringify(request),
@@ -68,7 +79,9 @@ export class DeepSeekClient {
 
     if (!res.ok) {
       const errorText = await res.text();
-      throw new Error(`DeepSeek API error (${res.status} ${res.statusText}): ${errorText}`);
+      throw new Error(
+        `DeepSeek API error (${res.status} ${res.statusText}): ${errorText}`,
+      );
     }
 
     return (await res.json()) as ChatCompletionResponse;
