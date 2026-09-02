@@ -1,169 +1,218 @@
-# Agent Monitor (v0.1.3)
+# Agent Monitor
 
-> **Chrome DevTools & Activity Monitor for AI Agents** — An open-source local control plane providing real-time observability, action timelines, unified file diffs, command inspection, and deterministic risk analysis for autonomous AI coding agents.
+> **Local-first activity monitor, deterministic policy gate, and real-time control plane for autonomous AI coding agents.**
 
----
-
-## 🌟 Key Features
-
-1. **Action-Centric Activity Timeline**: Real-time event stream capturing file reads, file writes, directory listings, command executions, and errors.
-2. **Visual Diff & Terminal Inspector**: Side-by-side unified file diffs with syntax highlighting and dark-theme terminal runner output with exit codes.
-3. **Deterministic, Explainable Risk Engine**: Scored rule matching (0–100) flagging `.env` file access, SSH private keys, `rm -rf` destructive commands, privilege escalation (`sudo`), outbound exfiltration (`curl`), and path traversal attempts.
-4. **Safe Workspace Containment & Guardrails**: Path normalization (`path.relative` + `fs.realpathSync` symlink checks), 2MB file size limits, 30s command timeouts, and bounded 100KB stdout/stderr buffers.
-5. **SQLite WAL Persistence as Single Source of Truth**: Instant session recovery upon page refresh or reconnection; live SSE synchronization.
-6. **Reference DeepSeek Coding Agent**: Autonomous ReAct loop with parallel tool call execution via `Promise.all` and clean agent message output.
-7. **Multi-Session Dashboard**: Browse and switch between past sessions, inspect per-session risk scores, and export full session history (session + events) as JSON.
+[![Version](https://img.shields.io/badge/version-0.2.0-blue.svg)](https://github.com/agentsentry/agentsentry)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+[![Local-First](https://img.shields.io/badge/architecture-local--first-success.svg)](docs/architecture.md)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.6-blue.svg)](https://www.typescriptlang.org/)
 
 ---
 
-## 🏗️ Monorepo Architecture
+## What is Agent Monitor?
+
+**Agent Monitor** is a local-first control plane and developer activity monitor for autonomous AI coding agents. It intercepts agent actions before execution, evaluates deterministic security risks and policies (`ALLOW`, `DENY`, `ASK`), records immutable audit events to an authoritative local SQLite database, and streams real-time telemetry to an embedded web dashboard and interactive terminal interface.
 
 ```text
-packages/
-├── core/       # Action & event domain schemas, types, and deterministic Risk Analyzer
-├── server/     # better-sqlite3 WAL database, session repository, EventBus, SSE & HTTP server
-├── agent/      # Tool implementations, security guardrails, ActionInterceptor, DeepSeek ReAct agent
-└── cli/        # `agent-monitor` CLI binary with real-time ANSI stream & summary banner
-
-apps/
-└── web/        # Next.js 15 App Router + Tailwind CSS DevTools dashboard
-```
-
-### Package Scripts (root)
-
-| Command | Description |
-| --- | --- |
-| `npm run dev:web` | Start the Next.js dashboard in development mode |
-| `npm run cli -- <args>` | Run the CLI via `tsx` (no build required) |
-| `npm test` | Run the full Vitest suite (25 tests across Core, Server, Agent) |
-| `npm run build` | Build the web dashboard and all packages |
-| `npm run build:web` | Build the web dashboard and copy static output into `packages/server/public` |
-| `npm run publish:packages` | Publish `core`, `server`, `agent`, and `cli` to npm |
-
----
-
-## 🚀 Quick Start
-
-### 1. Configure Environment
-
-Create `.env.local` in the project root (or copy `.env.sample`):
-
-```bash
-cp .env.sample .env.local
-```
-
-Add your DeepSeek API key:
-
-```env
-DEEPSEEK_API_KEY="your-deepseek-api-key"
-DEEPSEEK_MODEL="deepseek-chat"
-```
-
-### 2. Start the Live DevTools Dashboard (Terminal 1)
-
-```bash
-npm run dev:web
-```
-
-Open **[http://localhost:3000](http://localhost:3000)** in your browser.
-
-### 3. Run Agent Task with Activity Monitoring (Terminal 2)
-
-```bash
-npm run cli -- run --task "Inspect this project, examine package.json, and run automated tests"
-```
-
-Or target a specific workspace:
-
-```bash
-npm run cli -- run --task "Fix bugs in src/ and test" --workspace /path/to/project
-```
-
-The `run` command automatically starts the monitor server (or reuses one already running on the port), streams live events to the terminal, and prints a summary banner when the agent finishes.
-
----
-
-## 🖥️ CLI Reference
-
-The CLI exposes two subcommands: `run` (run an agent with monitoring) and `server` (standalone background monitor service).
-
-### `agent-monitor run`
-
-Run an autonomous coding agent with real-time activity monitoring and guardrails.
-
-| Option | Description | Default |
-| --- | --- | --- |
-| `-t, --task <task>` | The task or prompt for the agent to execute | *(required)* |
-| `-w, --workspace <path>` | Workspace directory path | current working directory |
-| `-p, --port <port>` | Monitor Server API port | `4040` |
-| `--web-port <port>` | Dashboard web port | `3000` |
-| `--model <model>` | DeepSeek model name | `deepseek-chat` |
-| `--db <path>` | Custom SQLite database file path | `.agent-monitor/data.db` |
-| `--keep-alive` | Keep the monitor server running after the agent task finishes | off |
-
-```bash
-npm run cli -- run --task "Refactor the API layer and run tests" \
-  --workspace ./my-project \
-  --keep-alive
-```
-
-### `agent-monitor server`
-
-Start the standalone Monitor Server to serve SQLite session history and live SSE.
-
-| Option | Description | Default |
-| --- | --- | --- |
-| `-p, --port <port>` | Monitor Server API port | `4040` |
-| `-w, --workspace <path>` | Workspace directory path | current working directory |
-| `--db <path>` | Custom SQLite database file path | `.agent-monitor/data.db` |
-
-```bash
-npm run cli -- server --port 4040
+┌─────────────────┐
+│   AI Agent      │ (Autonomous LLM Runtime)
+└────────┬────────┘
+         │ 1. Tool Call Intent (params)
+         ▼
+┌─────────────────┐
+│ Action          │ 2. Guardrails & Workspace Containment
+│ Interceptor     │ 3. Deterministic Risk Assessment (0-100)
+└────────┬────────┘
+         │ 4. Policy Engine Evaluation
+         ▼
+┌─────────────────────────────────────────────────────────────┐
+│                      POLICY DECISION                        │
+├─────────────────┬─────────────────────────┬─────────────────┤
+│     ALLOW       │          ASK            │      DENY       │
+│  Execute tool   │  Pause & Prompt Human   │ Block execution │
+│   immediately   │  (Terminal or Web UI)   │  immediately    │
+└────────┬────────┴────────────┬────────────┴────────┬────────┘
+         │                     ▼                     │
+         │          Human Approves / Denies          │
+         │                     │                     │
+         ▼                     ▼                     ▼
+┌─────────────────────────────────────────────────────────────┐
+│                 Authoritative SQLite Events                 │
+│      (session.*, policy.evaluated, approval.*, action.*)     │
+└──────────────────────────────┬──────────────────────────────┘
+                               │ SSE (Server-Sent Events)
+                               ▼
+┌─────────────────────────────────────────────────────────────┐
+│         Web DevTools Control Plane (http://localhost:4040)  │
+│  - Real-Time Action Stream   - Interactive Approval Modal   │
+│  - Unified File Diffs        - Process Output Inspection    │
+└─────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## 🔌 Monitor Server API
+## Key Capabilities (V0.2 OBSERVE + CONTROL)
 
-The monitor server (default `http://127.0.0.1:4040`) exposes a small HTTP + SSE API:
-
-| Endpoint | Method | Description |
-| --- | --- | --- |
-| `/health` | GET | Health check returning `{ status: "ok" }` |
-| `/sessions` | GET | List recent sessions (`?limit=`) |
-| `/sessions` | POST | Create a new session |
-| `/sessions/:id` | GET | Fetch a single session |
-| `/sessions/:id/events` | GET | Fetch events (`?afterSeq=`) |
-| `/sessions/:id/events` | POST | Insert an event |
-| `/events/stream?sessionId=:id` | GET | Live SSE event stream (supports `Last-Event-ID` / `afterSeq` replay) |
-
-The server also serves the exported static dashboard UI when a build is present.
+* 🛡️ **Deterministic Policy Engine:** Zero LLM heuristics. Strictly synchronous, rule-based policy evaluation with additive specificity scoring.
+* 🚦 **Three-Tier Policy Decisions:**
+  * **`ALLOW`:** Safe actions (workspace file reads, non-destructive test commands) execute immediately.
+  * **`DENY`:** Dangerous actions (`.env` secrets, SSH keys, destructive root commands) are blocked immediately with zero tool execution.
+  * **`ASK`:** Risky mutations (`git push`, `npm install`) pause agent execution until approved via the **Terminal** or **Web Dashboard**.
+* ⚡ **Human-in-the-Loop Approvals:** Approvals synchronize across terminal and browser. Atomic SQLite conditional updates eliminate race conditions.
+* 🔍 **Pre-Execution Risk Assessment:** Calculates deterministic risk scores (0–100) across 8 CWE security vectors (dotenv access, SSH keys, destructive deletions, privilege escalation, outbound network, path traversal).
+* 📦 **Local-First SQLite Persistence:** SQLite WAL mode with foreign keys ensures crash resilience and complete session replayability without cloud dependencies.
+* 🖥️ **Embedded DevTools Dashboard:** Next.js control plane served directly by the monitor binary on port 4040.
+* 🔌 **Provider-Agnostic Core:** `@agent-monitor/core` has zero LLM dependencies. Reference DeepSeek runtime is strictly decoupled in `@agent-monitor/agent`.
 
 ---
 
-## ⚙️ Environment Variables
+## Quick Start
 
-| Variable | Description | Default |
-| --- | --- | --- |
-| `DEEPSEEK_API_KEY` | DeepSeek API key (required to run the agent) | — |
-| `DEEPSEEK_MODEL` | DeepSeek model name | `deepseek-chat` |
-| `AGENT_MONITOR_PORT` | Monitor Server API port | `4040` |
-| `AGENT_MONITOR_HOST` | Monitor Server bind host | `127.0.0.1` |
-| `PORT` | Web dashboard port | `3000` |
-| `NEXT_PUBLIC_SERVER_URL` | Base URL the dashboard uses to reach the monitor server | `http://127.0.0.1:4040` |
+### 1. Prerequisites
 
----
+* **Node.js**: `v20.0.0` or higher
+* **Package Manager**: `npm`, `pnpm`, or `yarn`
+* **DeepSeek API Key** (for running the reference autonomous agent):
+  ```bash
+  export DEEPSEEK_API_KEY="sk-..."
+  ```
 
-## 🧪 Testing
+### 2. Installation & Bootstrap
 
-Run the full automated test suite (25 tests across Core, Server, and Agent packages):
+Clone the repository and build:
 
 ```bash
+git clone https://github.com/agentsentry/agentsentry.git
+cd agentsentry
+npm install
+npm run build
+```
+
+Initialize your workspace configuration:
+
+```bash
+npm run cli -- config init
+```
+
+This creates an [`agent-monitor.config.json`](docs/configuration.md) in your workspace root.
+
+---
+
+## Usage Guide
+
+### 1. Simulate Policies (Dry-Run Check)
+
+Test how the policy engine evaluates actions without running an agent or executing commands:
+
+```bash
+# Check git push (Triggers ASK)
+npm run cli -- policy check --command "git push origin main"
+
+# Check .env read (Triggers DENY)
+npm run cli -- policy check --action file.read --path ".env"
+
+# Check .env.sample read (Triggers ALLOW)
+npm run cli -- policy check --action file.read --path ".env.sample"
+```
+
+### 2. Run an Autonomous Agent Task
+
+Launch an agent with real-time policy interception and live monitoring:
+
+```bash
+npm run cli -- run --task "Inspect package.json and run npm test"
+```
+
+To run a task requiring human approval:
+
+```bash
+npm run cli -- run --task "Install lodash and update documentation" --keep-alive
+```
+
+When the agent attempts `npm install lodash`:
+1. The Policy Engine triggers an **`ASK`** policy gate.
+2. The agent execution pauses.
+3. You can approve/deny by typing `y`/`n` in the terminal **or** clicking **Allow Once** in the browser at `http://localhost:4040`.
+
+### 3. Start the Standalone Web Dashboard
+
+Explore recorded session logs, unified diffs, and inspect policies in the DevTools UI:
+
+```bash
+npm run cli -- server
+```
+
+Open **`http://localhost:4040`** in your browser.
+
+---
+
+## Monorepo Architecture
+
+```text
+agent-monitor/
+├── packages/
+│   ├── core/      # Domain schema, events, deterministic risk & policy engine
+│   ├── server/    # SQLite WAL repository, EventBus, SSE & REST API
+│   ├── agent/     # ActionInterceptor, Safe Tools, ApprovalManager, DeepSeek Runtime
+│   └── cli/       # Command-line interface binary (`agent-monitor`)
+├── apps/
+│   └── web/       # Next.js 15 Alabaster/Ink/Burnt Terra Cotta DevTools Dashboard
+└── docs/          # Comprehensive technical documentation
+```
+
+| Package | Version | Description |
+| :--- | :--- | :--- |
+| [`@agent-monitor/core`](packages/core/README.md) | `0.2.0` | Pure domain types, action models, risk analyzer, and policy engine (zero external dependencies). |
+| [`@agent-monitor/server`](packages/server/README.md) | `0.2.0` | Local SQLite WAL persistence, atomic approval resolution, SSE event stream, and REST endpoints. |
+| [`@agent-monitor/agent`](packages/agent/README.md) | `0.2.0` | Security guardrails, tool definitions, `ActionInterceptor`, and reference DeepSeek coding agent. |
+| [`@agent-monitor/cli`](packages/cli/README.md) | `0.2.0` | Unified CLI binary (`run`, `server`, `policy check`, `config init`, `sessions`, `status`). |
+| [`@agent-monitor/web`](apps/web/README.md) | `0.2.0` | Next.js DevTools dashboard for activity streams, diffs, and approval modals. |
+
+---
+
+## Documentation Index
+
+| Guide | Description |
+| :--- | :--- |
+| 🚀 [**Getting Started**](docs/getting-started.md) | Step-by-step onboarding from zero to your first monitored agent task. |
+| 🏛️ [**Architecture**](docs/architecture.md) | System components, data flows, SQLite event ordering, and package boundaries. |
+| 🛡️ [**Policies & Rules**](docs/policies.md) | Deterministic specificity calculation, precedence rules, and custom policies. |
+| ⚙️ [**Configuration Guide**](docs/configuration.md) | Full `agent-monitor.config.json` specification and environment variable overrides. |
+| 🔒 [**Security Model**](docs/security.md) | Guardrails, path traversal containment, symlink verification, and security boundaries. |
+| ⚡ [**Actions Reference**](docs/actions.md) | Action kinds (`file.read`, `file.write`, `process.exec`, `file.list`) and parameters. |
+| 📜 [**Events Reference**](docs/events.md) | Complete schema of all 10 domain events and strict ordering guarantees. |
+| 🤖 [**Agent Runtime**](docs/agent-runtime.md) | Decoupled runtime architecture, tool contracts, and DeepSeek client integration. |
+| 💻 [**CLI Manual**](docs/cli.md) | Complete CLI reference for all commands, options, and exit codes. |
+| 🖥️ [**Dashboard Guide**](docs/dashboard.md) | Activity stream filtering, unified diff viewer, and approval modal interface. |
+| 🛠️ [**Development**](docs/development.md) | Setting up local workspaces, adding actions, extending risk rules, and contributing. |
+| 🧪 [**Testing Guide**](docs/testing.md) | Test suites, policy unit tests, race condition verification, and coverage. |
+| ❓ [**Troubleshooting**](docs/troubleshooting.md) | Common issues, port conflicts, API key setup, and resolution steps. |
+
+---
+
+## Testing & Quality
+
+Run the complete test suite across all packages:
+
+```bash
+# Run all 50+ Vitest tests
 npm test
+
+# Type-check all packages
+npx tsc --build packages/core packages/server packages/agent packages/cli
+npx tsc --noEmit --project apps/web/tsconfig.json
 ```
 
 ---
 
-## ⚠️ Safety Notice
+## Roadmap
 
-Agent Monitor provides activity monitoring, deterministic risk analysis, and application-level guardrails (timeout, bounded buffers, workspace containment). **Host shell command execution (`process.exec`) is NOT an OS-level sandbox.** Run the agent only in workspaces you trust and are prepared to have modified.
+* **V0.1 (Complete):** Core Observation — Action interception, SQLite WAL logging, SSE streaming, Next.js DevTools dashboard.
+* **V0.2 (Current):** Observation + Control — Deterministic policy engine (`ALLOW`, `DENY`, `ASK`), human-in-the-loop approvals, dry-run simulator, configuration bootstrap.
+* **V0.3 (Planned):** Extended tool sandboxing, interactive policy rule builder, enhanced session export formats.
+
+---
+
+## License
+
+MIT © [Agent Monitor Contributors](LICENSE)

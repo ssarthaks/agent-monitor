@@ -1,0 +1,51 @@
+{
+  "$schema": "https://raw.githubusercontent.com/agentsentry/agent-monitor/main/schema.json",
+  "policy": {
+    "default": "ALLOW"
+  },
+  "approval": {
+    "timeoutMs": 300000
+  },
+  "rules": [
+    {
+      "id": "protect-environment-files",
+      "name": "Protect Environment Secrets",
+      "action": "file.*",
+      "path": "**/.env*",
+      "decision": "DENY",
+      "reason": "Prevent AI agents from reading or modifying environment secrets."
+    },
+    {
+      "id": "protect-ssh-keys",
+      "name": "Protect SSH Private Keys",
+      "action": "file.*",
+      "path": "~/.ssh/**",
+      "decision": "DENY",
+      "reason": "Prevent AI agents from accessing private SSH keys."
+    },
+    {
+      "id": "gate-git-push",
+      "name": "Gate Remote Git Push",
+      "action": "process.exec",
+      "command": "git push *",
+      "decision": "ASK",
+      "reason": "Pushing code to remote repositories requires explicit human approval."
+    },
+    {
+      "id": "gate-dependency-install",
+      "name": "Gate Package Installation",
+      "action": "process.exec",
+      "command": "npm install *",
+      "decision": "ASK",
+      "reason": "Installing third-party packages requires human approval."
+    },
+    {
+      "id": "gate-database-migrations",
+      "name": "Gate Database Migrations",
+      "action": "process.exec",
+      "command": "npm run migrate *",
+      "decision": "ASK",
+      "reason": "Database migrations require operator confirmation."
+    }
+  ]
+}

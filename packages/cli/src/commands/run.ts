@@ -209,7 +209,12 @@ export async function runAgentCommand(options: RunCommandOptions): Promise<void>
       console.log(`  ${pc.bold('Reason:')}     ${pc.white(approval.reason)}`);
       console.log();
       console.log(pc.dim('  You can also approve/deny from the web dashboard.'));
-      process.stdout.write(pc.bold(pc.yellow('  Allow this action? [y/N]: ')));
+
+      if (!process.stdin.isTTY) {
+        console.log(pc.bold(pc.cyan(`  👉 Non-interactive terminal detected. Please approve/deny in Web Dashboard:`)));
+        console.log(pc.bold(pc.underline(pc.cyan(`     ${dashboardUrl}${sessionId}`))));
+        return;
+      }
 
       const rl = readline.createInterface({
         input: process.stdin,
@@ -243,16 +248,27 @@ export async function runAgentCommand(options: RunCommandOptions): Promise<void>
         }
       });
 
-      rl.question('', (answer) => {
-        unsubscribe();
-        closePrompt();
-        const trimmed = answer.trim().toLowerCase();
-        if (trimmed === 'y' || trimmed === 'yes') {
-          approvalManager.resolve(approval.id, 'approved', 'user_terminal');
-        } else {
-          approvalManager.resolve(approval.id, 'denied', 'user_terminal');
-        }
-      });
+      const askLoop = () => {
+        if (isClosed) return;
+        rl.question(pc.bold(pc.yellow('  Allow this action? [y/n]: ')), (answer) => {
+          if (isClosed) return;
+          const trimmed = answer.trim().toLowerCase();
+          if (trimmed === 'y' || trimmed === 'yes') {
+            unsubscribe();
+            closePrompt();
+            approvalManager.resolve(approval.id, 'approved', 'user_terminal');
+          } else if (trimmed === 'n' || trimmed === 'no') {
+            unsubscribe();
+            closePrompt();
+            approvalManager.resolve(approval.id, 'denied', 'user_terminal');
+          } else {
+            console.log(pc.dim(`  Type 'y' to approve, 'n' to deny, or approve in Web UI: ${dashboardUrl}${sessionId}`));
+            askLoop();
+          }
+        });
+      };
+
+      askLoop();
     },
     onApprovalResolved: async (approval, decision, resolvedBy) => {
       // Fix 2: Authoritative resolution from CLI or timeout
