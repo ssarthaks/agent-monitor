@@ -1,6 +1,6 @@
-"use client";
+'use client';
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef } from 'react';
 import {
   AgentEvent,
   AgentSession,
@@ -8,21 +8,21 @@ import {
   ActionCompletedEvent,
   ActionFailedEvent,
   ActionBlockedEvent,
-} from "@agent-monitor/core";
+} from '@agent-monitor/core';
 
 export interface ActionItem {
   actionId: string;
   kind: string;
   category: string;
   params: Record<string, any>;
-  status: "running" | "completed" | "failed" | "blocked";
+  status: 'running' | 'completed' | 'failed' | 'blocked';
   startedAt: number;
   completedAt?: number;
   durationMs?: number;
-  risk: ActionStartedEvent["risk"];
+  risk: ActionStartedEvent['risk'];
   result?: any;
   error?: { message: string; code?: string };
-  metadata?: ActionCompletedEvent["metadata"];
+  metadata?: ActionCompletedEvent['metadata'];
   reason?: string;
 }
 
@@ -35,53 +35,64 @@ export function useSessionStream(targetSessionId?: string | null) {
   const [allSessions, setAllSessions] = useState<AgentSession[]>([]);
 
   const eventSourceRef = useRef<EventSource | null>(null);
-  const serverBase =
-    process.env.NEXT_PUBLIC_SERVER_URL || "http://127.0.0.1:4040";
+  const lastSeqRef = useRef<number>(0);
 
+  const serverBase =
+    typeof window !== 'undefined' &&
+    (window.location.port === '4040' ||
+      window.location.hostname === '127.0.0.1' ||
+      window.location.hostname === 'localhost')
+      ? `${window.location.protocol}//${window.location.hostname}:4040`
+      : process.env.NEXT_PUBLIC_SERVER_URL || 'http://127.0.0.1:4040';
+
+  // 1. Poll session list periodically to catch new sessions in real time
   useEffect(() => {
     async function loadSessions() {
       try {
-        const res = await fetch(`${serverBase}/sessions`);
+        const res = await fetch(`${serverBase}/sessions?limit=50`);
         if (res.ok) {
           const data = await res.json();
           setAllSessions(data.sessions || []);
         }
-      } catch (err: any) {
-        // Server might be offline
+      } catch {
+        // Server offline
       }
     }
     loadSessions();
-    const timer = setInterval(loadSessions, 5000);
+    const timer = setInterval(loadSessions, 2000);
     return () => clearInterval(timer);
   }, [serverBase]);
 
+  // 2. Active Session Resolution
+  const activeSessionId =
+    targetSessionId || (allSessions.length > 0 ? allSessions[0].id : null);
+
   useEffect(() => {
-    let activeSessionId = targetSessionId;
-    if (!activeSessionId && allSessions.length > 0) {
-      activeSessionId = allSessions[0].id;
-    }
     if (!activeSessionId) return;
 
     let isMounted = true;
+    lastSeqRef.current = 0;
 
-    async function loadFromSQLite() {
+    // A. Initial Load from SQLite
+    async function fetchSessionData() {
       try {
-        const resSession = await fetch(
-          `${serverBase}/sessions/${activeSessionId}`,
-        );
-        if (!resSession.ok) throw new Error("Session not found in SQLite");
-        const sessionData = await resSession.json();
+        const [resSession, resEvents] = await Promise.all([
+          fetch(`${serverBase}/sessions/${activeSessionId}`),
+          fetch(`${serverBase}/sessions/${activeSessionId}/events`),
+        ]);
 
-        const resEvents = await fetch(
-          `${serverBase}/sessions/${activeSessionId}/events`,
-        );
-        if (!resEvents.ok) throw new Error("Failed to fetch session events");
+        if (!resSession.ok) throw new Error('Session not found');
+        const sessionData = await resSession.json();
         const eventsData = await resEvents.json();
 
         if (isMounted) {
           setSession(sessionData.session);
-          setEvents(eventsData.events || []);
-          reconstructActions(eventsData.events || []);
+          const evList: AgentEvent[] = eventsData.events || [];
+          setEvents(evList);
+          reconstructActions(evList);
+          if (evList.length > 0) {
+            lastSeqRef.current = Math.max(...evList.map((e) => e.sequence || 0));
+          }
           setError(null);
         }
       } catch (err: any) {
@@ -89,8 +100,9 @@ export function useSessionStream(targetSessionId?: string | null) {
       }
     }
 
-    loadFromSQLite();
+    fetchSessionData();
 
+    // B. Real-Time SSE Stream
     const sseUrl = `${serverBase}/events/stream?sessionId=${activeSessionId}`;
     const es = new EventSource(sseUrl);
     eventSourceRef.current = es;
@@ -105,23 +117,23 @@ export function useSessionStream(targetSessionId?: string | null) {
 
     es.onmessage = (msg) => {
       try {
-        if (msg.data && msg.data.startsWith("{")) {
+        if (msg.data && msg.data.startsWith('{')) {
           const event: AgentEvent = JSON.parse(msg.data);
           handleIncomingEvent(event);
         }
       } catch {
-        // Heartbeat or malformed
+        // heartbeat
       }
     };
 
     const eventTypes = [
-      "session.started",
-      "session.ended",
-      "agent.message",
-      "action.started",
-      "action.completed",
-      "action.failed",
-      "action.blocked",
+      'session.started',
+      'session.ended',
+      'agent.message',
+      'action.started',
+      'action.completed',
+      'action.failed',
+      'action.blocked',
     ];
 
     eventTypes.forEach((type) => {
@@ -135,32 +147,63 @@ export function useSessionStream(targetSessionId?: string | null) {
       });
     });
 
+    // C. Active Live Fallback Polling (polls every 1000ms while session is active)
+    const pollInterval = setInterval(async () => {
+      if (!isMounted) return;
+      try {
+        const resEvents = await fetch(
+          `${serverBase}/sessions/${activeSessionId}/events?afterSeq=${lastSeqRef.current}`
+        );
+        if (resEvents.ok) {
+          const data = await resEvents.json();
+          const newEvents: AgentEvent[] = data.events || [];
+          for (const ev of newEvents) {
+            handleIncomingEvent(ev);
+          }
+        }
+
+        // Also refresh session metadata (status, risk, timer)
+        const resSession = await fetch(`${serverBase}/sessions/${activeSessionId}`);
+        if (resSession.ok) {
+          const sData = await resSession.json();
+          if (sData.session) {
+            setSession(sData.session);
+          }
+        }
+      } catch {
+        // ignore
+      }
+    }, 1000);
+
     function handleIncomingEvent(event: AgentEvent) {
       if (!isMounted) return;
 
+      if (event.sequence && event.sequence > lastSeqRef.current) {
+        lastSeqRef.current = event.sequence;
+      }
+
       setEvents((prev) => {
-        if (prev.some((p) => p.id === event.id)) return prev;
+        if (prev.some((p) => p.id === event.id || (event.sequence && p.sequence === event.sequence))) {
+          return prev;
+        }
         return [...prev, event];
       });
 
-      if (event.type === "session.started") {
-        setSession((prev) =>
-          prev
-            ? { ...prev, status: "running" }
-            : {
-                id: event.sessionId,
-                agentId: event.agentId,
-                agentName: event.agentName,
-                provider: event.provider,
-                model: event.model,
-                workspaceRoot: event.workspaceRoot,
-                task: event.task,
-                startedAt: event.timestamp,
-                status: "running",
-                riskScore: 0,
-              },
-        );
-      } else if (event.type === "session.ended") {
+      if (event.type === 'session.started') {
+        setSession((prev) => ({
+          ...(prev || ({} as any)),
+          id: event.sessionId,
+          agentId: event.agentId,
+          agentName: event.agentName,
+          provider: event.provider,
+          model: event.model,
+          workspaceRoot: event.workspaceRoot,
+          task: event.task,
+          startedAt: event.timestamp,
+          status: 'running',
+          riskScore: 0,
+        }));
+      } else if (event.type === 'session.ended') {
         setSession((prev) =>
           prev
             ? {
@@ -170,7 +213,7 @@ export function useSessionStream(targetSessionId?: string | null) {
                 summary: event.summary,
                 riskScore: event.summary.overallRiskScore,
               }
-            : null,
+            : null
         );
       }
 
@@ -179,10 +222,11 @@ export function useSessionStream(targetSessionId?: string | null) {
 
     return () => {
       isMounted = false;
+      clearInterval(pollInterval);
       es.close();
       eventSourceRef.current = null;
     };
-  }, [targetSessionId, allSessions.length, serverBase]);
+  }, [activeSessionId, serverBase]);
 
   function reconstructActions(evList: AgentEvent[]) {
     let list: ActionItem[] = [];
@@ -192,29 +236,26 @@ export function useSessionStream(targetSessionId?: string | null) {
     setActions(list);
   }
 
-  function updateActionList(
-    current: ActionItem[],
-    event: AgentEvent,
-  ): ActionItem[] {
-    if (event.type === "action.started") {
+  function updateActionList(current: ActionItem[], event: AgentEvent): ActionItem[] {
+    if (event.type === 'action.started') {
       const item: ActionItem = {
         actionId: event.actionId,
         kind: event.kind,
         category: event.category,
         params: event.params,
-        status: "running",
+        status: 'running',
         startedAt: event.timestamp,
         risk: event.risk,
       };
       return [...current.filter((a) => a.actionId !== event.actionId), item];
     }
 
-    if (event.type === "action.completed") {
+    if (event.type === 'action.completed') {
       return current.map((a) => {
         if (a.actionId !== event.actionId) return a;
         return {
           ...a,
-          status: "completed",
+          status: 'completed',
           completedAt: event.timestamp,
           durationMs: event.durationMs,
           result: event.result,
@@ -224,12 +265,12 @@ export function useSessionStream(targetSessionId?: string | null) {
       });
     }
 
-    if (event.type === "action.failed") {
+    if (event.type === 'action.failed') {
       return current.map((a) => {
         if (a.actionId !== event.actionId) return a;
         return {
           ...a,
-          status: "failed",
+          status: 'failed',
           completedAt: event.timestamp,
           durationMs: event.durationMs,
           error: event.error,
@@ -237,13 +278,13 @@ export function useSessionStream(targetSessionId?: string | null) {
       });
     }
 
-    if (event.type === "action.blocked") {
+    if (event.type === 'action.blocked') {
       const item: ActionItem = {
         actionId: event.actionId,
         kind: event.kind,
         category: event.category,
         params: event.params,
-        status: "blocked",
+        status: 'blocked',
         startedAt: event.timestamp,
         completedAt: event.timestamp,
         reason: event.reason,

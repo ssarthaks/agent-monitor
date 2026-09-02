@@ -1,6 +1,6 @@
 {
   "name": "@agent-monitor/server",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "SQLite WAL persistence and real-time SSE streaming server for Agent Monitor",
   "type": "module",
   "main": "./dist/index.js",
@@ -25,7 +25,7 @@
     "clean": "rm -rf dist public"
   },
   "dependencies": {
-    "@agent-monitor/core": "^0.1.4",
+    "@agent-monitor/core": "^0.1.5",
     "better-sqlite3": "^11.8.1"
   },
   "devDependencies": {

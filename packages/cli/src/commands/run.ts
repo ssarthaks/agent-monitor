@@ -139,6 +139,19 @@ export async function runAgentCommand(options: RunCommandOptions): Promise<void>
 
   repository.createSession(session);
 
+  // If an external background server is running, notify it of session creation
+  if (!server) {
+    try {
+      fetch(`${serverUrl}/sessions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(session),
+      }).catch(() => {});
+    } catch {
+      // ignore
+    }
+  }
+
   // 3. Connect Terminal Logger to EventBus
   eventBus.subscribe(sessionId, (event) => {
     printLiveEvent(event);
@@ -153,6 +166,19 @@ export async function runAgentCommand(options: RunCommandOptions): Promise<void>
         }
         repository.insertEvent(event);
         eventBus.publish(event);
+
+        // Forward event to running background server over HTTP so its SSE bus broadcasts it live
+        if (!server) {
+          try {
+            fetch(`${serverUrl}/sessions/${sessionId}/events`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(event),
+            }).catch(() => {});
+          } catch {
+            // ignore
+          }
+        }
       },
     },
     new RiskAnalyzer()

@@ -1,6 +1,6 @@
 {
   "name": "@agent-monitor/core",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "Core domain schema, event types, and deterministic risk engine for Agent Monitor",
   "type": "module",
   "main": "./dist/index.js",
