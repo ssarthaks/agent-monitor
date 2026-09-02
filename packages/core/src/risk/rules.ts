@@ -10,7 +10,18 @@ export const DETERMINISTIC_RISK_RULES: RiskRule[] = [
     matches: (kind, params) => {
       if (!kind.startsWith('file.')) return false;
       const pathStr = String(params.path || '').toLowerCase();
-      return /(^|[/\\])\.env(\.[a-z0-9_-]+)?$/i.test(pathStr) || pathStr.includes('.env');
+      const filename = pathStr.split(/[/\\]/).pop() || '';
+
+      // Exclude non-secret example / template / sample files
+      if (
+        /(\.(example|sample|template|dist|default|mock|spec|demo)$|-(example|sample|template|default)$)/i.test(
+          filename
+        )
+      ) {
+        return false;
+      }
+
+      return /(^|[/\\])\.env(\.[a-z0-9_-]+)?$/i.test(pathStr);
     },
   },
   // 2. SSH Keys & Credentials
@@ -33,6 +44,13 @@ export const DETERMINISTIC_RISK_RULES: RiskRule[] = [
     matches: (kind, params) => {
       if (!kind.startsWith('file.')) return false;
       const pathStr = String(params.path || '').toLowerCase();
+      const filename = pathStr.split(/[/\\]/).pop() || '';
+
+      // Exclude template/example credential files
+      if (/(\.(example|sample|template|dist|default|mock|demo)\.[a-z0-9]+$|\.(example|sample|template)$)/i.test(filename)) {
+        return false;
+      }
+
       return /(credentials\.json|\.aws|\.npmrc|\.netrc|id_token|private_key\.pem)/i.test(pathStr);
     },
   },

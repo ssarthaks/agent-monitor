@@ -17,6 +17,21 @@ describe('RiskAnalyzer', () => {
     expect(assessment.flags.some((f) => f.ruleId === 'SEC_DOTENV')).toBe(true);
   });
 
+  it('does NOT flag .env.sample, .env.example, or .env.template as high risk', () => {
+    const sample = analyzer.analyze('file.read', { path: '.env.sample' });
+    expect(sample.level).toBe('NONE');
+    expect(sample.score).toBe(0);
+    expect(sample.flags.length).toBe(0);
+
+    const example = analyzer.analyze('file.read', { path: 'apps/web/.env.example' });
+    expect(example.level).toBe('NONE');
+    expect(example.score).toBe(0);
+
+    const template = analyzer.analyze('file.read', { path: '.env.template' });
+    expect(template.level).toBe('NONE');
+    expect(template.score).toBe(0);
+  });
+
   it('detects SSH private key access as HIGH risk', () => {
     const assessment = analyzer.analyze('file.read', { path: '~/.ssh/id_rsa' });
     expect(assessment.level).toBe('HIGH');

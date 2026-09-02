@@ -36,6 +36,31 @@ export class SessionRepository {
     const row = stmt.get(id) as any;
     if (!row) return null;
 
+    let status = row.status;
+    let endedAt = row.ended_at;
+    let summary = row.summary_json ? JSON.parse(row.summary_json) : null;
+    let riskScore = row.risk_score;
+
+    // Self-healing: if session shows running but has session.ended event in database
+    if (status === 'running') {
+      const endedEventRow = this.db
+        .prepare(`SELECT payload_json FROM events WHERE session_id = ? AND type = 'session.ended' LIMIT 1`)
+        .get(id) as any;
+
+      if (endedEventRow) {
+        const endedEvent = JSON.parse(endedEventRow.payload_json);
+        status = endedEvent.status || 'completed';
+        endedAt = endedEvent.timestamp;
+        summary = endedEvent.summary || summary;
+        riskScore = Math.max(riskScore, endedEvent.summary?.overallRiskScore || 0);
+
+        // Update row for consistency
+        this.db
+          .prepare(`UPDATE sessions SET status = ?, ended_at = ?, summary_json = ?, risk_score = ? WHERE id = ?`)
+          .run(status, endedAt, JSON.stringify(summary), riskScore, id);
+      }
+    }
+
     return {
       id: row.id,
       agentId: row.agent_id,
@@ -45,10 +70,10 @@ export class SessionRepository {
       workspaceRoot: row.workspace_root,
       task: row.task,
       startedAt: row.started_at,
-      endedAt: row.ended_at,
-      status: row.status,
-      riskScore: row.risk_score,
-      summary: row.summary_json ? JSON.parse(row.summary_json) : null,
+      endedAt,
+      status,
+      riskScore,
+      summary,
     };
   }
 
@@ -56,20 +81,45 @@ export class SessionRepository {
     const stmt = this.db.prepare(`SELECT * FROM sessions ORDER BY started_at DESC LIMIT ?`);
     const rows = stmt.all(limit) as any[];
 
-    return rows.map((row) => ({
-      id: row.id,
-      agentId: row.agent_id,
-      agentName: row.agent_name,
-      provider: row.provider,
-      model: row.model,
-      workspaceRoot: row.workspace_root,
-      task: row.task,
-      startedAt: row.started_at,
-      endedAt: row.ended_at,
-      status: row.status,
-      riskScore: row.risk_score,
-      summary: row.summary_json ? JSON.parse(row.summary_json) : null,
-    }));
+    return rows.map((row) => {
+      let status = row.status;
+      let endedAt = row.ended_at;
+      let summary = row.summary_json ? JSON.parse(row.summary_json) : null;
+      let riskScore = row.risk_score;
+
+      if (status === 'running') {
+        const endedEventRow = this.db
+          .prepare(`SELECT payload_json FROM events WHERE session_id = ? AND type = 'session.ended' LIMIT 1`)
+          .get(row.id) as any;
+
+        if (endedEventRow) {
+          const endedEvent = JSON.parse(endedEventRow.payload_json);
+          status = endedEvent.status || 'completed';
+          endedAt = endedEvent.timestamp;
+          summary = endedEvent.summary || summary;
+          riskScore = Math.max(riskScore, endedEvent.summary?.overallRiskScore || 0);
+
+          this.db
+            .prepare(`UPDATE sessions SET status = ?, ended_at = ?, summary_json = ?, risk_score = ? WHERE id = ?`)
+            .run(status, endedAt, JSON.stringify(summary), riskScore, row.id);
+        }
+      }
+
+      return {
+        id: row.id,
+        agentId: row.agent_id,
+        agentName: row.agent_name,
+        provider: row.provider,
+        model: row.model,
+        workspaceRoot: row.workspace_root,
+        task: row.task,
+        startedAt: row.started_at,
+        endedAt,
+        status,
+        riskScore,
+        summary,
+      };
+    });
   }
 
   updateSession(
@@ -162,6 +212,23 @@ export class SessionRepository {
       this.db
         .prepare(`UPDATE sessions SET risk_score = MAX(risk_score, ?) WHERE id = ?`)
         .run(riskScore, event.sessionId);
+    }
+
+    // Automatically update session status and summary when session.ended is emitted
+    if (event.type === 'session.ended') {
+      this.db
+        .prepare(`
+          UPDATE sessions 
+          SET status = ?, ended_at = ?, summary_json = ?, risk_score = MAX(risk_score, ?) 
+          WHERE id = ?
+        `)
+        .run(
+          event.status,
+          event.timestamp,
+          JSON.stringify(event.summary),
+          event.summary?.overallRiskScore || 0,
+          event.sessionId
+        );
     }
   }
 
