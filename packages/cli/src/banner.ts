@@ -23,8 +23,8 @@ export function printStartupBanner(
       "  " +
       pc.bold(pc.white("AGENT MONITOR")) +
       " " +
-      pc.dim("v0.2.1 — Policy Enforcement & Human Approval") +
-      "    " +
+      pc.dim("v0.3.0 — Universal Agent Control Boundary") +
+      "      " +
       pc.bold(pc.cyan("║")),
   );
   console.log(
@@ -46,7 +46,7 @@ export function printStartupBanner(
   console.log();
   console.log(
     pc.yellow(
-      "  🛡️  POLICY ENGINE ACTIVE: V0.2 deterministic policy gates enforce ALLOW, DENY & ASK.",
+      "  🛡️  POLICY ENGINE ACTIVE: V0.3 universal control boundary enforces ALLOW, DENY & ASK with local Kill Switch.",
     ),
   );
   console.log();

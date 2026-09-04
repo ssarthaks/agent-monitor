@@ -89,7 +89,7 @@ export async function runPolicyCheckCommand(
       "  " +
       pc.bold(pc.white("AGENT MONITOR — Policy Dry Run Simulator")) +
       " " +
-      pc.dim("(V0.2)") +
+      pc.dim("(V0.3)") +
       "          " +
       pc.bold(pc.cyan("║")),
   );

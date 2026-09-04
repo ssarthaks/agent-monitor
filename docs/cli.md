@@ -18,6 +18,11 @@ Commands:
   config validate       Validate syntax and rules of an agent-monitor.config.json file
   sessions              List recorded agent sessions from SQLite storage
   status                Show system status, SQLite storage size, and active configuration
+  mcp proxy             Wrap an external MCP server process over stdio with deterministic controls
+  kill                  Authoritatively activate the local Kill Switch circuit breaker for a session
+  resume                Deactivate the Kill Switch and unblock session execution
+  tools                 Inspect external tool fingerprints, baseline integrity, and mutation status
+  security flows        Inspect detected behavioral data-flow sequences and multi-step exfiltration attempts
 ```
 
 ---
@@ -167,4 +172,125 @@ Inspect current workspace status, database size, and check if a background serve
 
 ```bash
 agent-monitor status [options]
+```
+
+---
+
+## 8. `agent-monitor mcp proxy`
+
+Wrap an external Model Context Protocol (MCP) server process over stdio with deterministic policy enforcement, RFC 8089 URI normalization, and runtime tool fingerprinting.
+
+```bash
+agent-monitor mcp proxy [options] -- <command...>
+```
+
+### Options
+
+- `<command...>` **(Required)**: Downstream command and arguments to execute (e.g. `npx -y @modelcontextprotocol/server-filesystem /tmp`).
+- `-w, --workspace <path>`: Workspace directory root.
+- `-s, --session <id>`: Session ID to associate or resume.
+- `--server-name <name>`: Descriptive identifier for the downstream MCP server (e.g. `filesystem`).
+- `-p, --port <port>`: Monitor Server port (default: `4040`).
+- `--db <path>`: Custom SQLite database file path.
+- `-c, --config <path>`: Custom path to `agent-monitor.config.json`.
+- `--no-server`: Disable background HTTP/SSE server for this proxy session.
+
+### Example
+
+```bash
+# Wrap an MCP filesystem server inside your project root
+agent-monitor mcp proxy --server-name filesystem -- npx -y @modelcontextprotocol/server-filesystem ./workspace
+```
+
+---
+
+## 9. `agent-monitor kill`
+
+Activate the authoritative local circuit breaker / Kill Switch for an active agent session in SQLite storage, terminating all ongoing and future tool executions immediately.
+
+```bash
+agent-monitor kill [options]
+```
+
+### Options
+
+- `-s, --session <id>`: Target session ID (defaults to active session).
+- `-r, --reason <reason>`: Explanation for activating the kill switch.
+- `-w, --workspace <path>`: Workspace directory.
+- `--db <path>`: Custom SQLite database file path.
+- `-p, --port <port>`: Monitor Server port to notify (default: `4040`).
+
+### Example
+
+```bash
+agent-monitor kill --session ses_prod_01 --reason "Unauthorized directory traversal detected"
+```
+
+---
+
+## 10. `agent-monitor resume`
+
+Deactivate the local Kill Switch for an agent session in SQLite storage and unblock execution.
+
+```bash
+agent-monitor resume [options]
+```
+
+### Options
+
+- `-s, --session <id>`: Target session ID (defaults to active session).
+- `-w, --workspace <path>`: Workspace directory.
+- `--db <path>`: Custom SQLite database file path.
+- `-p, --port <port>`: Monitor Server port to notify (default: `4040`).
+
+### Example
+
+```bash
+agent-monitor resume --session ses_prod_01
+```
+
+---
+
+## 11. `agent-monitor tools`
+
+Inspect external tool fingerprints discovered across agent sessions, verifying schema integrity and detecting runtime mutation (rug-pull) attacks.
+
+```bash
+agent-monitor tools [options]
+```
+
+### Options
+
+- `-s, --session <id>`: Target session ID.
+- `-w, --workspace <path>`: Workspace directory.
+- `--db <path>`: Custom SQLite database file path.
+- `-p, --port <port>`: Monitor Server port to query (default: `4040`).
+
+### Example
+
+```bash
+agent-monitor tools --session ses_prod_01
+```
+
+---
+
+## 12. `agent-monitor security flows`
+
+Inspect detected multi-step behavioral security sequences and data-flow anomalies (e.g. reading sensitive `.env` credentials followed by an outbound network call).
+
+```bash
+agent-monitor security flows [options]
+```
+
+### Options
+
+- `-s, --session <id>`: Target session ID.
+- `-w, --workspace <path>`: Workspace directory.
+- `--db <path>`: Custom SQLite database file path.
+- `-p, --port <port>`: Monitor Server port to query (default: `4040`).
+
+### Example
+
+```bash
+agent-monitor security flows --session ses_prod_01
 ```

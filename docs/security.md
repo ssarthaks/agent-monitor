@@ -44,7 +44,8 @@ No tool or resource read can bypass any step in this chain.
 
 All file-based actions (`file.read`, `file.write`, `file.list`, `resources/read`) are resolved against the designated `workspaceRoot`.
 
-- Component-aware path resolution handles POSIX forward slashes, Windows backslashes (`\ -> /`), and URL-encoded traversals (`%2e%2e%2f`).
+- **RFC 8089 URI Normalization**: Resource reads with `file://` URIs are normalized using standard Node.js `fileURLToPath()`, resolving explicit `file://localhost/...` paths to local absolute paths. Any remote host, invalid IP host (`file://127.0.0.1/...`), UNC network share, or non-file scheme (`s3://...`) fails closed and is flagged as an external path outside the workspace.
+- **Component-Aware Traversal Normalization**: Handles POSIX forward slashes, Windows backslashes (`\ -> /`), and iterative URL-encoded traversals (`%2e%2e%2f` and `%252e%252e%252f`).
 - Paths resolving outside the workspace root (e.g. `../../etc/passwd` or `subdir\..\..\..\etc\passwd`) are flagged with `isOutsideWorkspace: true`.
 - The built-in policy `deny-outside-workspace` immediately blocks any action resolving outside the workspace with `DENY`.
 
@@ -75,6 +76,7 @@ All file-based actions (`file.read`, `file.write`, `file.list`, `resources/read`
 ### C. Tool Fingerprinting & Schema Rug-Pull Detection
 
 - External tool definitions from `tools/list` are SHA-256 fingerprinted and persisted in SQLite.
+- **Multi-Server Isolation**: Tool fingerprints are uniquely tracked by `(session_id, tool_name, source)`. In multi-server sessions, an unmutated tool on one server never shadows a mutated tool with the same name on another server.
 - If a downstream MCP server dynamically mutates tool schema or parameters at runtime (a tool rug-pull), the tool is flagged as mutated and requires mandatory human approval (`ask-mutated-tools`).
 
 ### D. Result Inspection & Leak Prevention
@@ -89,7 +91,7 @@ All file-based actions (`file.read`, `file.write`, `file.list`, `resources/read`
 
 - The operator kill switch is maintained authoritatively in SQLite.
 - Checked both prior to policy evaluation and immediately post-approval to eliminate race conditions.
-- When activated, all pending and incoming tool executions and resource reads are immediately rejected.
+- When activated, all pending and incoming tool executions and resource reads are immediately rejected with `action.blocked`.
 
 ---
 
@@ -98,3 +100,11 @@ All file-based actions (`file.read`, `file.write`, `file.list`, `resources/read`
 - The MonitorServer REST/SSE endpoints restrict cross-origin requests.
 - Requests with untrusted external `Origin` headers (e.g. `https://evil.com`) are rejected with `403 Forbidden` to prevent malicious browser-based drive-by commands.
 - Local origins (`localhost`, `127.0.0.1`, `[::1]`) and direct non-browser requests (CLI, curl) are permitted.
+
+---
+
+## 6. Behavioral Sequence Engine & Data Flow Analysis
+
+- Detects multi-step exfiltration flows that appear benign in isolation (e.g. reading credentials from `.env`, followed by an outbound network call or child process execution).
+- Correlates historical actions across session state using a strictly bounded sliding window (`MAX_BEHAVIORAL_RECORDS = 200`) to guarantee deterministic memory consumption during runtime and SQLite event rehydration.
+- Integrates directly with PolicyEngine via `when.priorSensitiveRead` and `when.priorWorkspaceWrite` contextual rules.

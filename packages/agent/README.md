@@ -14,15 +14,17 @@ Action interception, security guardrails, safe tool definitions, approval manage
 
 - **`ActionInterceptor`**:
   - Intercepts tool calls before execution.
+  - Enforces authoritative pre- and post-approval Kill Switch circuit breaker.
   - Enforces workspace containment and symlink checks.
-  - Evaluates policies and coordinates human approval.
+  - Evaluates deterministic policies and coordinates human approval.
   - Emits strictly sequenced audit events.
 - **`ApprovalManager`**:
   - Manages pending approval requests.
   - Handles asynchronous resolution and expiration timeouts.
 - **`tools/`**:
   - Safe tools: `readFileTool`, `writeFileTool`, `listFilesTool`, `runCommandTool`.
-  - Guardrails: `resolveSafeWorkspacePath`.
+  - Guardrails: `resolveSafeWorkspacePath` (iterative URL decoding, POSIX and Windows backslash normalization, canonical symlink validation).
+  - Child Process Isolation: `runCommandTool` sanitizes `process.env` to prevent accidental credential leakage to child processes.
 - **`deepseek/`**:
   - `DeepSeekClient`: Lightweight HTTP client for DeepSeek Chat API.
   - `DeepSeekCodingAgent`: Reference autonomous coding agent loop.

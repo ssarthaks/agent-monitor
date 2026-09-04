@@ -21,20 +21,23 @@ export interface BaseAgentEvent {
 
 ---
 
-## 2. Complete Event Catalog (10 Events)
+## 2. Complete Event Catalog (13 Events)
 
-| Event Type               | Description                                                                              | Key Payload Fields                                                                                      |
-| :----------------------- | :--------------------------------------------------------------------------------------- | :------------------------------------------------------------------------------------------------------ |
-| **`session.started`**    | Emitted when a new agent monitoring session begins.                                      | `task`, `workspaceRoot`, `provider`, `model`                                                            |
-| **`session.ended`**      | Emitted when an agent finishes its task.                                                 | `status`, `durationMs`, `summary` (`totalActions`, `overallRiskScore`, `approvedCount`, `blockedCount`) |
-| **`agent.message`**      | Human-readable explanation or response from the agent.                                   | `content`                                                                                               |
-| **`policy.evaluated`**   | Result of deterministic policy evaluation before any execution.                          | `actionId`, `decision` (`ALLOW`/`DENY`/`ASK`), `matchedPolicies`, `specificity`, `reason`               |
-| **`approval.requested`** | Emitted when an action is evaluated as `ASK` and requires human sign-off.                | `approvalId`, `actionId`, `actionKind`, `params`, `risk`, `reason`                                      |
-| **`approval.resolved`**  | Emitted once upon human or timeout resolution.                                           | `approvalId`, `actionId`, `decision` (`approved`/`denied`/`expired`), `resolvedBy`                      |
-| **`action.started`**     | Emitted immediately before tool execution begins (only for `ALLOW` or approved actions). | `actionId`, `kind`, `category`, `params`, `risk`                                                        |
-| **`action.completed`**   | Emitted upon successful tool execution with results and diffs.                           | `actionId`, `result`, `durationMs`, `metadata` (`diff`, `linesChanged`, `exitCode`)                     |
-| **`action.failed`**      | Emitted when tool execution throws an error.                                             | `actionId`, `error`, `durationMs`                                                                       |
-| **`action.blocked`**     | Emitted when an action is blocked by policy `DENY` or human denial.                      | `actionId`, `reason`, `risk`, `policy`                                                                  |
+| Event Type               | Description                                                                                   | Key Payload Fields                                                                                      |
+| :----------------------- | :-------------------------------------------------------------------------------------------- | :------------------------------------------------------------------------------------------------------ |
+| **`session.started`**    | Emitted when a new agent monitoring session begins.                                           | `task`, `workspaceRoot`, `provider`, `model`                                                            |
+| **`session.ended`**      | Emitted when an agent finishes its task.                                                      | `status`, `durationMs`, `summary` (`totalActions`, `overallRiskScore`, `approvedCount`, `blockedCount`) |
+| **`agent.message`**      | Human-readable explanation or response from the agent.                                        | `content`                                                                                               |
+| **`policy.evaluated`**   | Result of deterministic policy evaluation before any execution.                               | `actionId`, `decision` (`ALLOW`/`DENY`/`ASK`), `matchedPolicies`, `specificity`, `reason`               |
+| **`approval.requested`** | Emitted when an action is evaluated as `ASK` and requires human sign-off.                     | `approvalId`, `actionId`, `actionKind`, `params`, `risk`, `reason`                                      |
+| **`approval.resolved`**  | Emitted once upon human or timeout resolution.                                                | `approvalId`, `actionId`, `decision` (`approved`/`denied`/`expired`), `resolvedBy`                      |
+| **`action.started`**     | Emitted immediately before tool execution begins (only for `ALLOW` or approved actions).      | `actionId`, `kind`, `category`, `params`, `risk`                                                        |
+| **`action.completed`**   | Emitted upon successful tool execution with results and diffs.                                | `actionId`, `result`, `durationMs`, `metadata` (`diff`, `linesChanged`, `exitCode`)                     |
+| **`action.failed`**      | Emitted when tool execution throws an error.                                                  | `actionId`, `error`, `durationMs`                                                                       |
+| **`action.blocked`**     | Emitted when an action is blocked by policy `DENY`, human denial, or Kill Switch.             | `actionId`, `reason`, `risk`, `policy`                                                                  |
+| **`tool.discovered`**    | Emitted when an external tool is first discovered with baseline SHA-256 fingerprint.          | `toolName`, `source`, `fingerprint`, `description`                                                      |
+| **`tool.changed`**       | Emitted when an external tool's schema or parameters change at runtime (rug-pull).            | `toolName`, `source`, `oldFingerprint`, `newFingerprint`, `changeCount`                                 |
+| **`behavioral.match`**   | Emitted when a multi-step behavioral sequence rule triggers (e.g. sensitive read to network). | `ruleId`, `name`, `severity`, `triggeringActionId`, `priorActionIds`                                    |
 
 ---
 

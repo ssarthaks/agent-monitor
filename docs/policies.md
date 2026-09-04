@@ -20,13 +20,17 @@ Specificity is computed as the sum across four orthogonal dimensions:
 |                | Action wildcard (`file.*`, `process.*`)                                               | **+10** |
 |                | Universal wildcard (`*`)                                                              | **0**   |
 | **2. Path**    | Exact file path or traversal boundary (`.env`, `credentials.json`, outside workspace) | **+50** |
+|                | Dynamic tool rug-pull protection rule (`ask-mutated-tools`)                           | **+45** |
 |                | Specific glob pattern (`**/.env*`, `docs/**`, `src/**/*.ts`)                          | **+30** |
 |                | Broad wildcard (`**/*`, `*`, `**`)                                                    | **+10** |
 | **3. Command** | Exact command (`npm test`, `git status`)                                              | **+50** |
 |                | Sub-command pattern (`git push *`, `npm install *`, `rm -rf *`)                       | **+40** |
 |                | Base command pattern (`git *`, `npm *`)                                               | **+20** |
 |                | Universal command pattern (`*`)                                                       | **+10** |
-| **4. Context** | Targeted `agentId` or `maxRiskScore` threshold                                        | **+10** |
+| **4. Context** | Prior sensitive read sequence condition (`when.priorSensitiveRead`)                   | **+15** |
+|                | Prior workspace write sequence condition (`when.priorWorkspaceWrite`)                 | **+10** |
+|                | Targeted tool source origin (`when.source`)                                           | **+10** |
+|                | Targeted `agentId` or `maxRiskScore` threshold                                        | **+10** |
 
 ---
 
@@ -87,7 +91,13 @@ Agent Monitor ships with default secure policies out-of-the-box:
   decision: ASK
   reason: Installing package dependencies requires human approval.
 
-# 7. Safe Workspace Reading & Testing
+# 7. Dynamic Tool Mutation (Rug-Pull Protection)
+- id: ask-mutated-tools
+  action: "*"
+  decision: ASK
+  reason: External tool schema or description was modified at runtime after session discovery (potential tool rug-pull). Operator approval required.
+
+# 8. Safe Workspace Reading & Testing
 - id: allow-workspace-file-read
   action: file.read
   decision: ALLOW

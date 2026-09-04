@@ -33,6 +33,21 @@ agent-monitor status
 
 # 7. Start standalone Monitor Server & Web Dashboard
 agent-monitor server
+
+# 8. Run transparent MCP stdio proxy with deterministic security boundary
+agent-monitor mcp proxy -- npx -y @modelcontextprotocol/server-filesystem /tmp
+
+# 9. Activate authoritative local Kill Switch circuit breaker
+agent-monitor kill --session <session-id> --reason "Operator manual abort"
+
+# 10. Deactivate Kill Switch and resume session execution
+agent-monitor resume --session <session-id>
+
+# 11. Inspect external tool fingerprints and mutation status (rug-pull detection)
+agent-monitor tools --session <session-id>
+
+# 12. Inspect behavioral data flows and security sequence violations
+agent-monitor security flows --session <session-id>
 ```
 
 ---

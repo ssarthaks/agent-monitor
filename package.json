@@ -1,6 +1,6 @@
 {
   "name": "agent-monitor-monorepo",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "private": true,
   "description": "Agent Monitor - Local-First Activity Monitor & Deterministic Policy Gate for AI Agents",
   "workspaces": [
@@ -13,7 +13,7 @@
     "test": "vitest run",
     "dev:web": "npm run dev --workspace=apps/web",
     "cli": "tsx packages/cli/src/index.ts",
-    "publish:packages": "npm publish --workspace=@agent-monitor/core --workspace=@agent-monitor/server --workspace=@agent-monitor/agent --workspace=@agent-monitor/cli --access public"
+    "publish:packages": "npm publish --workspace=@agent-monitor/core --workspace=@agent-monitor/server --workspace=@agent-monitor/agent --workspace=@agent-monitor/gateway --workspace=@agent-monitor/cli --access public"
   },
   "devDependencies": {
     "@types/node": "^20.17.0",

@@ -12,6 +12,12 @@ Core domain models, event interfaces, deterministic risk analysis, and additive 
 
 ## Key Modules
 
+- **`normalization/`**:
+  - `ActionNormalizer`: Canonical action mapping from arbitrary MCP tool calls, raw process commands, and resource URIs into strongly-typed action intents.
+- **`behavior/`**:
+  - `BehavioralEngine`: Correlates multi-step action sequences across a session (e.g. sensitive file reads followed by network egress or process execution) with sliding window memory bounds.
+- **`fingerprint/`**:
+  - `computeToolFingerprint`: Cryptographic SHA-256 fingerprinting of external tool schemas for runtime mutation (rug-pull) detection.
 - **`policy/`**:
   - `PolicyEngine`: Synchronous evaluation engine with additive rule specificity.
   - `matcher`: Glob and command pattern matching (`**/*.secret`, `git push *`).
@@ -19,7 +25,7 @@ Core domain models, event interfaces, deterministic risk analysis, and additive 
 - **`risk/`**:
   - `RiskAnalyzer`: Evaluates pre-execution risk scores (0–100) mapped to CWE categories.
 - **`events/`**:
-  - Complete domain event types (`session.*`, `policy.evaluated`, `approval.*`, `action.*`).
+  - Complete domain event types (`session.*`, `policy.evaluated`, `approval.*`, `action.*`, `tool.discovered`, `tool.changed`, `behavioral.match`).
 - **`actions/`**:
   - Canonical action models (`ActionKind`, `ActionCategory`).
 - **`approvals/`**:
