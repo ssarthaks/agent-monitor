@@ -87,7 +87,6 @@ export class ActionNormalizer {
       (nameLower.includes("read") &&
         (nameLower.includes("file") || nameLower.includes("fs"))) ||
       toolName.endsWith("read_file") ||
-      toolName.endsWith(".read_file")
       toolName.endsWith(".read_file") ||
       toolName.endsWith("view_file") ||
       toolName.endsWith(".view_file")
@@ -178,7 +177,6 @@ export class ActionNormalizer {
       nameLower === "removefile" ||
       nameLower === "remove" ||
       nameLower === "unlink" ||
-      nameLower === "rm"
       nameLower === "rm" ||
       nameLower === "delfile"
     ) {
@@ -253,31 +251,29 @@ export class ActionNormalizer {
     // 7. Fallback for custom external tools
     const extractedPath = extractPath(rawParams);
     let fallbackCategory: ActionCategory = "custom";
-    if (nameLower.startsWith("file") || nameLower.startsWith("fs"))
     if (
       nameLower.startsWith("file") ||
       nameLower.startsWith("fs") ||
       Boolean(extractedPath)
-    )
+    ) {
       fallbackCategory = "file";
-    else if (
+    } else if (
       nameLower.startsWith("exec") ||
       nameLower.startsWith("cmd") ||
-      nameLower.startsWith("shell")
       nameLower.startsWith("shell") ||
       nameLower.startsWith("run") ||
       nameLower.startsWith("bash")
-    )
+    ) {
       fallbackCategory = "process";
-    else if (
+    } else if (
       nameLower.startsWith("net") ||
       nameLower.startsWith("web") ||
-      nameLower.startsWith("http")
       nameLower.startsWith("http") ||
       nameLower.startsWith("fetch") ||
       nameLower.startsWith("curl")
-    )
+    ) {
       fallbackCategory = "network";
+    }
 
     const params: Record<string, any> = { ...rawParams };
     if (extractedPath && !params.path) {
@@ -288,16 +284,14 @@ export class ActionNormalizer {
       fallbackCategory === "file"
         ? `file.custom.${toolName}`
         : fallbackCategory === "process"
-        ? `process.custom.${toolName}`
-        : fallbackCategory === "network"
-        ? `network.custom.${toolName}`
-        : `custom.${source.type}.${toolName}`;
+          ? `process.custom.${toolName}`
+          : fallbackCategory === "network"
+            ? `network.custom.${toolName}`
+            : `custom.${source.type}.${toolName}`;
 
     return {
-      kind: `custom.${source.type}.${toolName}`,
       kind: customKind,
       category: fallbackCategory,
-      params: { ...rawParams },
       params,
       source: { ...source, toolName },
       rawToolName: toolName,

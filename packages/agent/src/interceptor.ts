@@ -43,6 +43,14 @@ export class ActionInterceptor {
   private behavioralEngine?: BehavioralEngine;
   private isKillSwitchActive?: (sessionId: string) => boolean;
   private sink: EventSink;
+  private sessionSequences = new Map<string, number>();
+
+  private getNextSequence(sessionId: string): number {
+    const current = this.sessionSequences.get(sessionId) ?? 0;
+    const next = current + 1;
+    this.sessionSequences.set(sessionId, next);
+    return next;
+  }
 
   constructor(
     sinkOrOptions: EventSink | InterceptorOptions,
@@ -85,7 +93,7 @@ export class ActionInterceptor {
     await this.sink.emit({
       ...event,
       id: this.generateId("evt"),
-      sequence: 0,
+      sequence: this.getNextSequence(event.sessionId),
       type: "session.started",
     });
   }
@@ -96,7 +104,7 @@ export class ActionInterceptor {
     await this.sink.emit({
       ...event,
       id: this.generateId("evt"),
-      sequence: 0,
+      sequence: this.getNextSequence(event.sessionId),
       type: "session.ended",
     });
   }
@@ -110,7 +118,7 @@ export class ActionInterceptor {
   ): Promise<void> {
     const event: AgentMessageEvent = {
       id: this.generateId("evt"),
-      sequence: 0,
+      sequence: this.getNextSequence(sessionId),
       sessionId,
       agentId,
       timestamp: Date.now(),
@@ -148,7 +156,7 @@ export class ActionInterceptor {
     if (this.isKillSwitchActive && this.isKillSwitchActive(ctx.sessionId)) {
       const blockedEvent: ActionBlockedEvent = {
         id: this.generateId("evt"),
-        sequence: 0,
+        sequence: this.getNextSequence(ctx.sessionId),
         sessionId: ctx.sessionId,
         agentId: ctx.agentId,
         timestamp: Date.now(),
@@ -198,7 +206,7 @@ export class ActionInterceptor {
       for (const match of bMatches) {
         await this.sink.emit({
           id: this.generateId("evt"),
-          sequence: 0,
+          sequence: this.getNextSequence(ctx.sessionId),
           sessionId: ctx.sessionId,
           agentId: ctx.agentId,
           timestamp: Date.now(),
@@ -243,7 +251,7 @@ export class ActionInterceptor {
     // 4. Emit policy.evaluated Event
     const policyEvent: PolicyEvaluatedEvent = {
       id: this.generateId("evt"),
-      sequence: 0,
+      sequence: this.getNextSequence(ctx.sessionId),
       sessionId: ctx.sessionId,
       agentId: ctx.agentId,
       timestamp: Date.now(),
@@ -260,7 +268,7 @@ export class ActionInterceptor {
     if (policyEval.decision === "DENY") {
       const blockedEvent: ActionBlockedEvent = {
         id: this.generateId("evt"),
-        sequence: 0,
+        sequence: this.getNextSequence(ctx.sessionId),
         sessionId: ctx.sessionId,
         agentId: ctx.agentId,
         timestamp: Date.now(),
@@ -305,7 +313,7 @@ export class ActionInterceptor {
 
       const reqEvent: ApprovalRequestedEvent = {
         id: this.generateId("evt"),
-        sequence: 0,
+        sequence: this.getNextSequence(ctx.sessionId),
         sessionId: ctx.sessionId,
         agentId: ctx.agentId,
         timestamp: Date.now(),
@@ -333,7 +341,7 @@ export class ActionInterceptor {
       if (!this.approvalManager) {
         const resEvent: ApprovalResolvedEvent = {
           id: this.generateId("evt"),
-          sequence: 0,
+          sequence: this.getNextSequence(ctx.sessionId),
           sessionId: ctx.sessionId,
           agentId: ctx.agentId,
           timestamp: Date.now(),
@@ -349,7 +357,7 @@ export class ActionInterceptor {
       if (resolution.decision !== "approved") {
         const blockedEvent: ActionBlockedEvent = {
           id: this.generateId("evt"),
-          sequence: 0,
+          sequence: this.getNextSequence(ctx.sessionId),
           sessionId: ctx.sessionId,
           agentId: ctx.agentId,
           timestamp: Date.now(),
@@ -378,10 +386,47 @@ export class ActionInterceptor {
       }
     }
 
+    // 5.1 Post-Approval / Pre-Execution Kill Switch Check
+    if (this.isKillSwitchActive && this.isKillSwitchActive(ctx.sessionId)) {
+      const blockedEvent: ActionBlockedEvent = {
+        id: this.generateId("evt"),
+        sequence: this.getNextSequence(ctx.sessionId),
+        sessionId: ctx.sessionId,
+        agentId: ctx.agentId,
+        timestamp: Date.now(),
+        type: "action.blocked",
+        actionId,
+        kind: tool.actionKind,
+        category: tool.category,
+        params: rawParams,
+        reason:
+          "Execution blocked: Session was killed by operator kill switch prior to execution",
+        risk: {
+          level: "CRITICAL",
+          score: 100,
+          flags: [
+            {
+              ruleId: "KILL_SWITCH_ACTIVE",
+              description: "Session killed by operator kill switch",
+              severity: "CRITICAL",
+              scoreImpact: 100,
+            },
+          ],
+        },
+        policy: {
+          decision: "DENY",
+          matchedPolicies: ["authoritative-kill-switch"],
+          reason: "Session killed by operator",
+        },
+      };
+      await this.sink.emit(blockedEvent);
+      throw new Error("Action execution blocked by operator kill switch");
+    }
+
     // 6. Action Execution (Only reached if ALLOW or Approved)
     const startedEvent: ActionStartedEvent = {
       id: this.generateId("evt"),
-      sequence: 0,
+      sequence: this.getNextSequence(ctx.sessionId),
       sessionId: ctx.sessionId,
       agentId: ctx.agentId,
       timestamp: startTime,
@@ -411,7 +456,7 @@ export class ActionInterceptor {
 
       const completedEvent: ActionCompletedEvent = {
         id: this.generateId("evt"),
-        sequence: 0,
+        sequence: this.getNextSequence(ctx.sessionId),
         sessionId: ctx.sessionId,
         agentId: ctx.agentId,
         timestamp: Date.now(),
@@ -442,7 +487,7 @@ export class ActionInterceptor {
 
       const failedEvent: ActionFailedEvent = {
         id: this.generateId("evt"),
-        sequence: 0,
+        sequence: this.getNextSequence(ctx.sessionId),
         sessionId: ctx.sessionId,
         agentId: ctx.agentId,
         timestamp: Date.now(),

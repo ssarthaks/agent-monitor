@@ -225,10 +225,16 @@ export class SessionRepository {
       riskFlagsJson = JSON.stringify(event.risk.flags);
     }
 
+    const sequence =
+      typeof event.sequence === "number" && event.sequence > 0
+        ? event.sequence
+        : this.getNextSequence(event.sessionId);
+    (event as any).sequence = sequence;
+
     stmt.run({
       id: event.id,
       sessionId: event.sessionId,
-      sequence: event.sequence,
+      sequence,
       type: event.type,
       timestamp: event.timestamp,
       actionId,
@@ -569,7 +575,9 @@ export class SessionRepository {
     if (!row) return false;
     return (
       Boolean(row.change_count && row.change_count > 0) ||
-      Boolean(row.initial_fingerprint && row.initial_fingerprint !== row.fingerprint)
+      Boolean(
+        row.initial_fingerprint && row.initial_fingerprint !== row.fingerprint,
+      )
     );
   }
 

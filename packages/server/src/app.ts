@@ -65,6 +65,22 @@ function findPublicDir(customDir?: string): string | null {
   return null;
 }
 
+function isAllowedOrigin(origin?: string): boolean {
+  if (!origin) return true;
+  try {
+    const parsed = new URL(origin);
+    const hostname = parsed.hostname;
+    return (
+      hostname === "localhost" ||
+      hostname === "127.0.0.1" ||
+      hostname === "[::1]" ||
+      hostname === "::1"
+    );
+  } catch {
+    return false;
+  }
+}
+
 export class MonitorServer {
   private server: http.Server;
   private port: number;
@@ -112,7 +128,18 @@ export class MonitorServer {
     req: http.IncomingMessage,
     res: http.ServerResponse,
   ): Promise<void> {
-    res.setHeader("Access-Control-Allow-Origin", "*");
+    const origin = req.headers.origin;
+    const isAllowed = isAllowedOrigin(origin);
+
+    if (origin) {
+      if (isAllowed) {
+        res.setHeader("Access-Control-Allow-Origin", origin);
+        res.setHeader("Access-Control-Allow-Credentials", "true");
+      }
+    } else {
+      res.setHeader("Access-Control-Allow-Origin", "*");
+    }
+
     res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
     res.setHeader(
       "Access-Control-Allow-Headers",
@@ -120,8 +147,21 @@ export class MonitorServer {
     );
 
     if (req.method === "OPTIONS") {
+      if (origin && !isAllowed) {
+        res.writeHead(403, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ error: "Forbidden: Origin not allowed" }));
+        return;
+      }
       res.writeHead(204);
       res.end();
+      return;
+    }
+
+    if (origin && !isAllowed) {
+      res.writeHead(403, { "Content-Type": "application/json" });
+      res.end(
+        JSON.stringify({ error: "Forbidden: Cross-origin request denied" }),
+      );
       return;
     }
 

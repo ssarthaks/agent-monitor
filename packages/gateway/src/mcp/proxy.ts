@@ -30,6 +30,7 @@ import {
   JsonRpcMessage,
   JsonRpcRequest,
   JsonRpcResponse,
+  MCP_METHOD_SECURITY_TABLE,
 } from "../types.js";
 import {
   JsonRpcStreamParser,
@@ -159,8 +160,6 @@ export class McpStdioProxy implements ToolGateway {
         ),
       );
       this.running = false;
-      for (const [id] of this.pendingClientRequests.entries()) {
-        this.sendToClient(
       for (const [id, pending] of this.pendingClientRequests.entries()) {
         pending.resolve(
           createJsonRpcError(
@@ -179,8 +178,6 @@ export class McpStdioProxy implements ToolGateway {
           `[Gateway Error] Downstream child process error: ${err.message}`,
         ),
       );
-      for (const [id] of this.pendingClientRequests.entries()) {
-        this.sendToClient(
       for (const [id, pending] of this.pendingClientRequests.entries()) {
         pending.resolve(
           createJsonRpcError(
@@ -208,11 +205,7 @@ export class McpStdioProxy implements ToolGateway {
 
     for (const [id, pending] of this.pendingClientRequests.entries()) {
       pending.resolve(
-        createJsonRpcError(
-          id,
-          -32000,
-          "Downstream MCP server proxy stopped",
-        ),
+        createJsonRpcError(id, -32000, "Downstream MCP server proxy stopped"),
       );
     }
     this.pendingClientRequests.clear();
@@ -248,8 +241,6 @@ export class McpStdioProxy implements ToolGateway {
   // Client Request Interception Pipeline
   // ─────────────────────────────────────────────────────────────
 
-  private async handleClientMessage(msg: JsonRpcMessage): Promise<void> {
-    // If it's a notification, forward transparently
   private async handleClientMessage(msg: any): Promise<void> {
     // 1. JSON-RPC Batch handling (VULN-01 fix)
     if (Array.isArray(msg)) {
@@ -292,7 +283,7 @@ export class McpStdioProxy implements ToolGateway {
 
     // A. Intercept tools/call
     if (msg.method === "tools/call") {
-      // VULN-02 fix: Notification on tools/call is forbidden in MCP (an 'id' is required)
+      // Notification on tools/call is forbidden in MCP (an 'id' is required)
       if (msg.id === undefined || msg.id === null) {
         return createJsonRpcError(
           null,
@@ -303,50 +294,60 @@ export class McpStdioProxy implements ToolGateway {
       return await this.interceptToolCall(msg as JsonRpcRequest);
     }
 
-    // B. If it's a notification, forward transparently (notifications do not produce responses)
+    // B. Intercept resources/read (FINDING-01 Fix: Resource Read Control Plane Interception)
+    if (msg.method === "resources/read") {
+      if (msg.id === undefined || msg.id === null) {
+        return createJsonRpcError(
+          null,
+          -32600,
+          "Invalid Request: 'resources/read' cannot be invoked as a notification. An 'id' is required.",
+        );
+      }
+      return await this.interceptResourceRead(msg as JsonRpcRequest);
+    }
+
+    // C. Notifications (no response expected)
     if (isJsonRpcNotification(msg)) {
       this.forwardToDownstream(msg);
-      return;
       return null;
     }
 
-    // If it's not a request, forward transparently
-    // C. If it's not a request, forward transparently
+    // D. Not a request (e.g. response or invalid frame)
     if (!isJsonRpcRequest(msg)) {
       this.forwardToDownstream(msg);
-      return;
       return null;
     }
 
     const request = msg as JsonRpcRequest;
 
-    // A. Intercept tools/call
-    if (request.method === "tools/call") {
-      await this.interceptToolCall(request);
-      return;
-    }
-
-    // B. Intercept tools/list (store request so we can inspect downstream tool discovery)
-    // D. Intercept tools/list (store request so we can inspect downstream tool discovery)
+    // E. Intercept tools/list (for tool discovery and fingerprinting)
     if (request.method === "tools/list") {
-      this.forwardWithCorrelation(request);
-      return;
       return this.forwardWithCorrelation(request);
     }
 
-    // C. Forward all other requests with correlation
-    this.forwardWithCorrelation(request);
-    // E. Forward all other requests with correlation
+    // F. Safe MCP discovery/lifecycle methods
+    const classification = MCP_METHOD_SECURITY_TABLE[request.method];
+    if (classification && classification.safePassthrough) {
+      return this.forwardWithCorrelation(request);
+    }
+
+    // G. Fail closed on unsupported or unclassified requests
+    if (!classification) {
+      this.log(
+        pc.yellow(
+          `[Agent Monitor Warning] Blocked unclassified MCP method '${request.method}' to enforce security boundary.`,
+        ),
+      );
+      return createJsonRpcError(
+        request.id,
+        -32601,
+        `Method not supported or blocked by security control: ${request.method}`,
+      );
+    }
+
     return this.forwardWithCorrelation(request);
   }
 
-  private forwardWithCorrelation(request: JsonRpcRequest): void {
-    this.pendingClientRequests.set(request.id, {
-      request,
-      resolve: (res) => {
-        this.sendToClient(res);
-      },
-      startTime: Date.now(),
   private forwardWithCorrelation(
     request: JsonRpcRequest,
   ): Promise<JsonRpcResponse> {
@@ -358,8 +359,6 @@ export class McpStdioProxy implements ToolGateway {
       });
       this.forwardToDownstream(request);
     });
-
-    this.forwardToDownstream(request);
   }
 
   private forwardToDownstream(msg: JsonRpcMessage): void {
@@ -369,31 +368,17 @@ export class McpStdioProxy implements ToolGateway {
       !this.childProcess.stdin.writable
     ) {
       if (isJsonRpcRequest(msg)) {
-        this.sendToClient(
-          createJsonRpcError(
-            msg.id,
-            -32000,
-            "Downstream MCP server process is unavailable",
-          ),
-        );
         const pending = this.pendingClientRequests.get(msg.id);
+        const err = createJsonRpcError(
+          msg.id,
+          -32000,
+          "Downstream MCP server process is unavailable",
+        );
         if (pending) {
           this.pendingClientRequests.delete(msg.id);
-          pending.resolve(
-            createJsonRpcError(
-              msg.id,
-              -32000,
-              "Downstream MCP server process is unavailable",
-            ),
-          );
+          pending.resolve(err);
         } else {
-          this.sendToClient(
-            createJsonRpcError(
-              msg.id,
-              -32000,
-              "Downstream MCP server process is unavailable",
-            ),
-          );
+          this.sendToClient(err);
         }
       }
       return;
@@ -403,7 +388,6 @@ export class McpStdioProxy implements ToolGateway {
     this.childProcess.stdin.write(serialized);
   }
 
-  private sendToClient(msg: JsonRpcMessage): void {
   private sendToClient(msg: JsonRpcMessage | JsonRpcMessage[]): void {
     if (
       !this.options.clientOutputStream ||
@@ -411,7 +395,6 @@ export class McpStdioProxy implements ToolGateway {
     ) {
       return;
     }
-    const serialized = serializeJsonRpc(msg, false);
     const serialized = serializeJsonRpc(msg as any, false);
     this.options.clientOutputStream.write(serialized);
   }
@@ -420,7 +403,6 @@ export class McpStdioProxy implements ToolGateway {
   // Core Tool Call Interception (Deterministic Policy + Kill Switch)
   // ─────────────────────────────────────────────────────────────
 
-  private async interceptToolCall(request: JsonRpcRequest): Promise<void> {
   private async interceptToolCall(
     request: JsonRpcRequest,
   ): Promise<JsonRpcResponse> {
@@ -475,7 +457,6 @@ export class McpStdioProxy implements ToolGateway {
       await this.options.eventSink.emit(blockedEvent);
 
       // Return standard MCP tool error result (isError: true) without invoking downstream
-      this.sendToClient({
       return {
         jsonrpc: "2.0",
         id: request.id,
@@ -488,8 +469,6 @@ export class McpStdioProxy implements ToolGateway {
             },
           ],
         },
-      });
-      return;
       };
     }
 
@@ -629,7 +608,6 @@ export class McpStdioProxy implements ToolGateway {
       };
       await this.options.eventSink.emit(blockedEv);
 
-      this.sendToClient({
       return {
         jsonrpc: "2.0",
         id: request.id,
@@ -642,8 +620,6 @@ export class McpStdioProxy implements ToolGateway {
             },
           ],
         },
-      });
-      return;
       };
     }
 
@@ -669,7 +645,7 @@ export class McpStdioProxy implements ToolGateway {
           risk,
         };
         await this.options.eventSink.emit(blockedEv);
-        this.sendToClient({
+
         return {
           jsonrpc: "2.0",
           id: request.id,
@@ -682,8 +658,6 @@ export class McpStdioProxy implements ToolGateway {
               },
             ],
           },
-        });
-        return;
         };
       }
 
@@ -764,7 +738,6 @@ export class McpStdioProxy implements ToolGateway {
         };
         await this.options.eventSink.emit(blockedEv);
 
-        this.sendToClient({
         return {
           jsonrpc: "2.0",
           id: request.id,
@@ -777,8 +750,59 @@ export class McpStdioProxy implements ToolGateway {
               },
             ],
           },
-        });
-        return;
+        };
+      }
+
+      // POST-APPROVAL KILL SWITCH RE-CHECK (FINDING-05 Fix: Authoritative Concurrency Invariant)
+      if (this.options.repository.isKillSwitchActive(this.options.sessionId)) {
+        const raceBlockedEv: ActionBlockedEvent = {
+          id: this.generateId("evt"),
+          sequence: this.options.repository.getNextSequence(
+            this.options.sessionId,
+          ),
+          sessionId: this.options.sessionId,
+          agentId: this.options.agentId || "mcp-client",
+          timestamp: Date.now(),
+          type: "action.blocked",
+          actionId,
+          kind: canonical.kind,
+          category: canonical.category,
+          params: canonical.params,
+          reason:
+            "Execution blocked: Session was killed by operator while approval was pending",
+          risk: {
+            level: "CRITICAL",
+            score: 100,
+            flags: [
+              {
+                ruleId: "KILL_SWITCH_ACTIVE",
+                description:
+                  "Session killed by operator kill switch during approval wait",
+                severity: "CRITICAL",
+                scoreImpact: 100,
+              },
+            ],
+          },
+          policy: {
+            decision: "DENY",
+            matchedPolicies: ["authoritative-kill-switch"],
+            reason: "Session killed by operator during approval wait",
+          },
+        };
+        await this.options.eventSink.emit(raceBlockedEv);
+
+        return {
+          jsonrpc: "2.0",
+          id: request.id,
+          result: {
+            isError: true,
+            content: [
+              {
+                type: "text",
+                text: "Execution blocked: Session was killed by operator while approval was pending",
+              },
+            ],
+          },
         };
       }
     }
@@ -800,14 +824,6 @@ export class McpStdioProxy implements ToolGateway {
     await this.options.eventSink.emit(startedEv);
 
     // Save correlation context for downstream response handling
-    this.pendingClientRequests.set(request.id, {
-      request,
-      resolve: (res) => {
-        this.sendToClient(res);
-      },
-      startTime,
-      normalizedAction: canonical,
-      actionId,
     return new Promise<JsonRpcResponse>((resolve) => {
       this.pendingClientRequests.set(request.id, {
         request,
@@ -821,15 +837,12 @@ export class McpStdioProxy implements ToolGateway {
 
       this.forwardToDownstream(request);
     });
-
-    this.forwardToDownstream(request);
   }
 
   // ─────────────────────────────────────────────────────────────
   // Downstream Server Response Handling
   // ─────────────────────────────────────────────────────────────
 
-  private handleDownstreamMessage(msg: JsonRpcMessage): void {
   private handleDownstreamMessage(msg: any): void {
     if (Array.isArray(msg)) {
       for (const item of msg) {
@@ -854,7 +867,6 @@ export class McpStdioProxy implements ToolGateway {
 
     const response = msg as JsonRpcResponse;
     const pending =
-      response.id !== null
       response.id !== null && response.id !== undefined
         ? this.pendingClientRequests.get(response.id)
         : undefined;
@@ -880,6 +892,16 @@ export class McpStdioProxy implements ToolGateway {
       pending.normalizedAction
     ) {
       this.handleToolCallResponse(response, pending as any);
+      return;
+    }
+
+    // C. If this was an intercepted resources/read response: record action.completed and inspect
+    if (
+      pending.request.method === "resources/read" &&
+      pending.actionId &&
+      pending.normalizedAction
+    ) {
+      this.handleResourceReadResponse(response, pending as any);
       return;
     }
 
@@ -969,10 +991,512 @@ export class McpStdioProxy implements ToolGateway {
     }
 
     const riskAnalyzer = this.options.riskAnalyzer || new RiskAnalyzer();
-    const risk = riskAnalyzer.analyze(canonical.kind, canonical.params);
     const risk = riskAnalyzer.analyze(canonical.kind, canonical.params, {
       isOutsideWorkspace: pending.isOutsideWorkspace,
       isToolMutated: pending.isToolMutated,
+    });
+
+    const completedEv: ActionCompletedEvent = {
+      id: this.generateId("evt"),
+      sequence: this.options.repository.getNextSequence(this.options.sessionId),
+      sessionId: this.options.sessionId,
+      agentId: this.options.agentId || "mcp-client",
+      timestamp: Date.now(),
+      type: "action.completed",
+      actionId,
+      kind: canonical.kind,
+      category: canonical.category,
+      params: canonical.params,
+      result: response.result,
+      durationMs,
+      risk,
+      metadata: {
+        bytesProcessed: inspection.sizeBytes,
+      },
+    };
+
+    this.options.eventSink.emit(completedEv).catch(() => {});
+
+    if (this.options.behavioralEngine) {
+      this.options.behavioralEngine.recordAction(this.options.sessionId, {
+        actionId,
+        kind: canonical.kind,
+        category: canonical.category,
+        params: canonical.params,
+      });
+    }
+
+    pending.resolve(response);
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // Resource Read Interception (FINDING-01: MCP resources/read)
+  // ─────────────────────────────────────────────────────────────
+
+  private async interceptResourceRead(
+    request: JsonRpcRequest,
+  ): Promise<JsonRpcResponse> {
+    const rawParams = request.params || {};
+    const uri = String(rawParams.uri || "");
+    const actionId = this.generateId("act");
+    const startTime = Date.now();
+
+    // Normalize URI to target file path
+    let filePath = uri;
+    if (filePath.startsWith("file://")) {
+      filePath = filePath.replace(/^file:\/\//, "");
+      if (process.platform === "win32" && filePath.startsWith("/")) {
+        filePath = filePath.slice(1);
+      }
+    }
+
+    const actionSource: ActionSource = {
+      type: "mcp",
+      server: this.options.serverName || this.options.command,
+      transport: "stdio",
+      toolName: "resources/read",
+    };
+
+    const canonical = {
+      kind: "file.read" as const,
+      category: "file" as const,
+      params: {
+        ...rawParams,
+        uri,
+        path: filePath,
+      },
+      source: actionSource,
+      rawToolName: "resources/read",
+      rawParams,
+    };
+
+    // 1. Authoritative Kill Switch Check
+    if (this.options.repository.isKillSwitchActive(this.options.sessionId)) {
+      const blockedEvent: ActionBlockedEvent = {
+        id: this.generateId("evt"),
+        sequence: this.options.repository.getNextSequence(
+          this.options.sessionId,
+        ),
+        sessionId: this.options.sessionId,
+        agentId: this.options.agentId || "mcp-client",
+        timestamp: Date.now(),
+        type: "action.blocked",
+        actionId,
+        kind: canonical.kind,
+        category: canonical.category,
+        params: canonical.params,
+        reason: "Execution blocked: Session was killed by operator kill switch",
+        risk: {
+          level: "CRITICAL",
+          score: 100,
+          flags: [
+            {
+              ruleId: "KILL_SWITCH_ACTIVE",
+              description: "Session killed by operator kill switch",
+              severity: "CRITICAL",
+              scoreImpact: 100,
+            },
+          ],
+        },
+        policy: {
+          decision: "DENY",
+          matchedPolicies: ["authoritative-kill-switch"],
+          reason: "Session killed by operator",
+        },
+      };
+
+      await this.options.eventSink.emit(blockedEvent);
+
+      return {
+        jsonrpc: "2.0",
+        id: request.id,
+        result: {
+          isError: true,
+          content: [
+            {
+              type: "text",
+              text: "Execution blocked: Session was killed by operator kill switch",
+            },
+          ],
+        },
+      };
+    }
+
+    // 2. Behavioral Sequence Evaluation
+    let hasPriorSensitiveRead = false;
+    let hasPriorWorkspaceWrite = false;
+    if (this.options.behavioralEngine) {
+      const bCtx = this.options.behavioralEngine.getContext(
+        this.options.sessionId,
+      );
+      hasPriorSensitiveRead = bCtx.sensitiveReads.length > 0;
+      hasPriorWorkspaceWrite = bCtx.workspaceWrites.length > 0;
+
+      const bMatches = this.options.behavioralEngine.evaluate(
+        this.options.sessionId,
+        {
+          actionId,
+          kind: canonical.kind,
+          category: canonical.category,
+          params: canonical.params,
+        },
+      );
+
+      for (const match of bMatches) {
+        this.options.repository.recordBehavioralMatch({
+          id: this.generateId("bm"),
+          sessionId: this.options.sessionId,
+          ruleId: match.ruleId,
+          name: match.name,
+          severity: match.severity,
+          reason: match.reason,
+          triggeringActionId: actionId,
+          priorActionIds: match.priorActionIds,
+          createdAt: Date.now(),
+        });
+
+        await this.options.eventSink.emit({
+          id: this.generateId("evt"),
+          sequence: this.options.repository.getNextSequence(
+            this.options.sessionId,
+          ),
+          sessionId: this.options.sessionId,
+          agentId: this.options.agentId || "mcp-client",
+          timestamp: Date.now(),
+          type: "behavioral.match",
+          match,
+        } as any);
+      }
+    }
+
+    // 3. Workspace Boundary Check
+    let isOutsideWorkspace = false;
+    if (filePath) {
+      const pathCheck = resolveSafeWorkspacePath(
+        filePath,
+        this.options.workspaceRoot,
+      );
+      isOutsideWorkspace = pathCheck.isOutsideWorkspace;
+    }
+
+    // 4. Deterministic Risk Assessment
+    const riskAnalyzer = this.options.riskAnalyzer || new RiskAnalyzer();
+    const risk = riskAnalyzer.analyze(canonical.kind, canonical.params, {
+      isOutsideWorkspace,
+    });
+
+    // 5. Deterministic Policy Evaluation
+    const policyEval = this.options.policyEngine.evaluate(
+      {
+        kind: canonical.kind,
+        category: canonical.category,
+        params: canonical.params,
+        risk,
+      },
+      {
+        workspaceRoot: this.options.workspaceRoot,
+        agentId: this.options.agentId,
+        isOutsideWorkspace,
+        hasPriorSensitiveRead,
+        hasPriorWorkspaceWrite,
+        source: `mcp:${actionSource.server || "default"}`,
+      },
+    );
+
+    // 6. Emit policy.evaluated Event
+    const policyEv: PolicyEvaluatedEvent = {
+      id: this.generateId("evt"),
+      sequence: this.options.repository.getNextSequence(this.options.sessionId),
+      sessionId: this.options.sessionId,
+      agentId: this.options.agentId || "mcp-client",
+      timestamp: Date.now(),
+      type: "policy.evaluated",
+      actionId,
+      decision: policyEval.decision,
+      matchedPolicies: policyEval.matchedPolicies,
+      specificity: policyEval.specificity,
+      reason: policyEval.reason,
+    };
+    await this.options.eventSink.emit(policyEv);
+
+    // 7. Policy Decision: DENY
+    if (policyEval.decision === "DENY") {
+      const blockedEv: ActionBlockedEvent = {
+        id: this.generateId("evt"),
+        sequence: this.options.repository.getNextSequence(
+          this.options.sessionId,
+        ),
+        sessionId: this.options.sessionId,
+        agentId: this.options.agentId || "mcp-client",
+        timestamp: Date.now(),
+        type: "action.blocked",
+        actionId,
+        kind: canonical.kind,
+        category: canonical.category,
+        params: canonical.params,
+        reason: `Blocked by security policy: ${policyEval.reason}`,
+        risk,
+        policy: {
+          decision: "DENY",
+          matchedPolicies: policyEval.matchedPolicies,
+          reason: policyEval.reason,
+        },
+      };
+      await this.options.eventSink.emit(blockedEv);
+
+      return {
+        jsonrpc: "2.0",
+        id: request.id,
+        result: {
+          isError: true,
+          content: [
+            {
+              type: "text",
+              text: `Security Violation: Resource read '${uri}' (${canonical.kind}) was blocked by policy: ${policyEval.reason}`,
+            },
+          ],
+        },
+      };
+    }
+
+    // 8. Policy Decision: ASK
+    if (policyEval.decision === "ASK") {
+      if (!this.options.approvalManager) {
+        const blockedEv: ActionBlockedEvent = {
+          id: this.generateId("evt"),
+          sequence: this.options.repository.getNextSequence(
+            this.options.sessionId,
+          ),
+          sessionId: this.options.sessionId,
+          agentId: this.options.agentId || "mcp-client",
+          timestamp: Date.now(),
+          type: "action.blocked",
+          actionId,
+          kind: canonical.kind,
+          category: canonical.category,
+          params: canonical.params,
+          reason:
+            "Resource read requires approval, but approval manager is not configured",
+          risk,
+        };
+        await this.options.eventSink.emit(blockedEv);
+
+        return {
+          jsonrpc: "2.0",
+          id: request.id,
+          result: {
+            isError: true,
+            content: [
+              {
+                type: "text",
+                text: "Resource read requires human approval, but no approval manager is active",
+              },
+            ],
+          },
+        };
+      }
+
+      const approvalId = this.generateId("app");
+      const approvalReq = {
+        id: approvalId,
+        actionId,
+        sessionId: this.options.sessionId,
+        actionKind: canonical.kind,
+        category: canonical.category,
+        params: canonical.params,
+        risk,
+        reason: policyEval.reason,
+        matchedPolicies: policyEval.matchedPolicies,
+        status: "pending" as const,
+        createdAt: Date.now(),
+      };
+
+      const requestedEv: ApprovalRequestedEvent = {
+        id: this.generateId("evt"),
+        sequence: this.options.repository.getNextSequence(
+          this.options.sessionId,
+        ),
+        sessionId: this.options.sessionId,
+        agentId: this.options.agentId || "mcp-client",
+        timestamp: Date.now(),
+        type: "approval.requested",
+        approvalId,
+        actionId,
+        actionKind: canonical.kind,
+        category: canonical.category,
+        params: canonical.params,
+        risk,
+        reason: policyEval.reason,
+        matchedPolicies: policyEval.matchedPolicies,
+      };
+      await this.options.eventSink.emit(requestedEv);
+
+      await this.options.approvalManager.createApproval(approvalReq);
+      const resolution =
+        await this.options.approvalManager.waitForResolution(approvalId);
+
+      const resolvedEv: ApprovalResolvedEvent = {
+        id: this.generateId("evt"),
+        sequence: this.options.repository.getNextSequence(
+          this.options.sessionId,
+        ),
+        sessionId: this.options.sessionId,
+        agentId: this.options.agentId || "mcp-client",
+        timestamp: Date.now(),
+        type: "approval.resolved",
+        approvalId,
+        actionId,
+        decision: resolution.decision,
+        resolvedBy: resolution.resolvedBy,
+      };
+      await this.options.eventSink.emit(resolvedEv);
+
+      if (resolution.decision !== "approved") {
+        const blockedEv: ActionBlockedEvent = {
+          id: this.generateId("evt"),
+          sequence: this.options.repository.getNextSequence(
+            this.options.sessionId,
+          ),
+          sessionId: this.options.sessionId,
+          agentId: this.options.agentId || "mcp-client",
+          timestamp: Date.now(),
+          type: "action.blocked",
+          actionId,
+          kind: canonical.kind,
+          category: canonical.category,
+          params: canonical.params,
+          reason:
+            resolution.decision === "expired"
+              ? "Approval request timed out"
+              : "Approval denied by operator",
+          risk,
+        };
+        await this.options.eventSink.emit(blockedEv);
+
+        return {
+          jsonrpc: "2.0",
+          id: request.id,
+          result: {
+            isError: true,
+            content: [
+              {
+                type: "text",
+                text: `Policy Error: Resource read '${uri}' was ${resolution.decision === "expired" ? "timed out" : "denied by user"}`,
+              },
+            ],
+          },
+        };
+      }
+
+      // POST-APPROVAL KILL SWITCH RE-CHECK (FINDING-05 Fix)
+      if (this.options.repository.isKillSwitchActive(this.options.sessionId)) {
+        const raceBlockedEv: ActionBlockedEvent = {
+          id: this.generateId("evt"),
+          sequence: this.options.repository.getNextSequence(
+            this.options.sessionId,
+          ),
+          sessionId: this.options.sessionId,
+          agentId: this.options.agentId || "mcp-client",
+          timestamp: Date.now(),
+          type: "action.blocked",
+          actionId,
+          kind: canonical.kind,
+          category: canonical.category,
+          params: canonical.params,
+          reason:
+            "Execution blocked: Session was killed by operator while approval was pending",
+          risk: {
+            level: "CRITICAL",
+            score: 100,
+            flags: [
+              {
+                ruleId: "KILL_SWITCH_ACTIVE",
+                description:
+                  "Session killed by operator kill switch during approval wait",
+                severity: "CRITICAL",
+                scoreImpact: 100,
+              },
+            ],
+          },
+          policy: {
+            decision: "DENY",
+            matchedPolicies: ["authoritative-kill-switch"],
+            reason: "Session killed by operator during approval wait",
+          },
+        };
+        await this.options.eventSink.emit(raceBlockedEv);
+
+        return {
+          jsonrpc: "2.0",
+          id: request.id,
+          result: {
+            isError: true,
+            content: [
+              {
+                type: "text",
+                text: "Execution blocked: Session was killed by operator while approval was pending",
+              },
+            ],
+          },
+        };
+      }
+    }
+
+    // 9. ALLOW or Approved -> Forward to Downstream Server
+    const startedEv: ActionStartedEvent = {
+      id: this.generateId("evt"),
+      sequence: this.options.repository.getNextSequence(this.options.sessionId),
+      sessionId: this.options.sessionId,
+      agentId: this.options.agentId || "mcp-client",
+      timestamp: startTime,
+      type: "action.started",
+      actionId,
+      kind: canonical.kind,
+      category: canonical.category,
+      params: canonical.params,
+      risk,
+    };
+    await this.options.eventSink.emit(startedEv);
+
+    // Save correlation context for downstream response handling
+    return new Promise<JsonRpcResponse>((resolve) => {
+      this.pendingClientRequests.set(request.id, {
+        request,
+        resolve,
+        startTime,
+        normalizedAction: canonical,
+        actionId,
+        isOutsideWorkspace,
+      });
+
+      this.forwardToDownstream(request);
+    });
+  }
+
+  private handleResourceReadResponse(
+    response: JsonRpcResponse,
+    pending: {
+      request: JsonRpcRequest;
+      resolve: (res: JsonRpcResponse) => void;
+      startTime: number;
+      normalizedAction: any;
+      actionId: string;
+      isOutsideWorkspace?: boolean;
+    },
+  ): void {
+    const durationMs = Date.now() - pending.startTime;
+    const canonical = pending.normalizedAction;
+    const actionId = pending.actionId;
+
+    // Inspect result
+    const inspection = McpResultInspector.inspect(response.result);
+    if (inspection.modified) {
+      response.result = inspection.result;
+    }
+
+    const riskAnalyzer = this.options.riskAnalyzer || new RiskAnalyzer();
+    const risk = riskAnalyzer.analyze(canonical.kind, canonical.params, {
+      isOutsideWorkspace: pending.isOutsideWorkspace,
     });
 
     const completedEv: ActionCompletedEvent = {

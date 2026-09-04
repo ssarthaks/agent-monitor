@@ -1,4 +1,4 @@
-export type RiskLevel = 'NONE' | 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
+export type RiskLevel = "NONE" | "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
 
 export interface RiskFlag {
   ruleId: string;
@@ -18,10 +18,9 @@ export interface RiskRule {
   description: string;
   severity: RiskLevel;
   scoreImpact: number;
-  matches: (kind: string, params: Record<string, any>, context?: { isOutsideWorkspace?: boolean }) => boolean;
   matches: (
     kind: string,
     params: Record<string, any>,
-    context?: { isOutsideWorkspace?: boolean; isToolMutated?: boolean }
+    context?: { isOutsideWorkspace?: boolean; isToolMutated?: boolean },
   ) => boolean;
 }

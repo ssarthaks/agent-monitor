@@ -62,3 +62,152 @@ export interface McpProxyOptions {
   logStream?: NodeJS.WritableStream;
   serverName?: string;
 }
+
+export type McpMethodCategory =
+  | "side_effect"
+  | "resource_read"
+  | "tool_discovery"
+  | "metadata_discovery"
+  | "lifecycle"
+  | "notification"
+  | "unsupported";
+
+export interface McpMethodSecurityEntry {
+  method: string;
+  category: McpMethodCategory;
+  intercepted: boolean;
+  normalized: boolean;
+  policyEvaluated: boolean;
+  riskEvaluated: boolean;
+  killSwitchChecked: boolean;
+  approvalPossible: boolean;
+  audited: boolean;
+  safePassthrough: boolean;
+  reason: string;
+}
+
+export const MCP_METHOD_SECURITY_TABLE: Record<string, McpMethodSecurityEntry> =
+  {
+    "tools/call": {
+      method: "tools/call",
+      category: "side_effect",
+      intercepted: true,
+      normalized: true,
+      policyEvaluated: true,
+      riskEvaluated: true,
+      killSwitchChecked: true,
+      approvalPossible: true,
+      audited: true,
+      safePassthrough: false,
+      reason:
+        "Executes tools with filesystem, shell, network, or external side effects.",
+    },
+    "resources/read": {
+      method: "resources/read",
+      category: "resource_read",
+      intercepted: true,
+      normalized: true,
+      policyEvaluated: true,
+      riskEvaluated: true,
+      killSwitchChecked: true,
+      approvalPossible: true,
+      audited: true,
+      safePassthrough: false,
+      reason:
+        "Reads filesystem or external resource contents; must not bypass policy/containment.",
+    },
+    "tools/list": {
+      method: "tools/list",
+      category: "tool_discovery",
+      intercepted: true,
+      normalized: false,
+      policyEvaluated: false,
+      riskEvaluated: false,
+      killSwitchChecked: false,
+      approvalPossible: false,
+      audited: true,
+      safePassthrough: true,
+      reason:
+        "Discovers available tools; response inspected to establish cryptographic tool fingerprints.",
+    },
+    "resources/list": {
+      method: "resources/list",
+      category: "metadata_discovery",
+      intercepted: false,
+      normalized: false,
+      policyEvaluated: false,
+      riskEvaluated: false,
+      killSwitchChecked: false,
+      approvalPossible: false,
+      audited: false,
+      safePassthrough: true,
+      reason:
+        "Lists available resource metadata/URIs without reading their contents.",
+    },
+    "resources/templates/list": {
+      method: "resources/templates/list",
+      category: "metadata_discovery",
+      intercepted: false,
+      normalized: false,
+      policyEvaluated: false,
+      riskEvaluated: false,
+      killSwitchChecked: false,
+      approvalPossible: false,
+      audited: false,
+      safePassthrough: true,
+      reason: "Lists URI templates for resources without retrieving data.",
+    },
+    "prompts/list": {
+      method: "prompts/list",
+      category: "metadata_discovery",
+      intercepted: false,
+      normalized: false,
+      policyEvaluated: false,
+      riskEvaluated: false,
+      killSwitchChecked: false,
+      approvalPossible: false,
+      audited: false,
+      safePassthrough: true,
+      reason: "Lists available server prompt templates.",
+    },
+    "prompts/get": {
+      method: "prompts/get",
+      category: "metadata_discovery",
+      intercepted: false,
+      normalized: false,
+      policyEvaluated: false,
+      riskEvaluated: false,
+      killSwitchChecked: false,
+      approvalPossible: false,
+      audited: false,
+      safePassthrough: true,
+      reason: "Fetches prompt messages without executing actions.",
+    },
+    initialize: {
+      method: "initialize",
+      category: "lifecycle",
+      intercepted: false,
+      normalized: false,
+      policyEvaluated: false,
+      riskEvaluated: false,
+      killSwitchChecked: false,
+      approvalPossible: false,
+      audited: false,
+      safePassthrough: true,
+      reason:
+        "MCP protocol handshake establishing protocol version and capabilities.",
+    },
+    ping: {
+      method: "ping",
+      category: "lifecycle",
+      intercepted: false,
+      normalized: false,
+      policyEvaluated: false,
+      riskEvaluated: false,
+      killSwitchChecked: false,
+      approvalPossible: false,
+      audited: false,
+      safePassthrough: true,
+      reason: "Standard JSON-RPC liveness probe.",
+    },
+  };

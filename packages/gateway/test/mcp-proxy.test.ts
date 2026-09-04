@@ -60,6 +60,14 @@ describe("MCP Stdio Proxy Integration & Adversarial Verification (V0.3)", () => 
                 content: [{ type: 'text', text: 'DOWNSTREAM_EXECUTION_SUCCESS' }]
               }
             }));
+          } else if (req.method === 'resources/read') {
+            console.log(JSON.stringify({
+              jsonrpc: '2.0',
+              id: req.id,
+              result: {
+                contents: [{ uri: req.params ? req.params.uri : '', text: 'DOWNSTREAM_RESOURCE_SUCCESS' }]
+              }
+            }));
           } else {
             console.log(JSON.stringify({
               jsonrpc: '2.0',
@@ -558,12 +566,18 @@ describe("MCP Stdio Proxy Integration & Adversarial Verification (V0.3)", () => 
     expect(resDeny.result.content[0].text).toContain("blocked by policy");
 
     expect(resAllow).toBeDefined();
-    expect(resAllow.result.content[0].text).toContain("DOWNSTREAM_EXECUTION_SUCCESS");
+    expect(resAllow.result.content[0].text).toContain(
+      "DOWNSTREAM_EXECUTION_SUCCESS",
+    );
 
     // Verify events were generated for both
-    const blockedEvents = emittedEvents.filter((e) => e.type === "action.blocked");
+    const blockedEvents = emittedEvents.filter(
+      (e) => e.type === "action.blocked",
+    );
     expect(blockedEvents).toHaveLength(1);
-    const completedEvents = emittedEvents.filter((e) => e.type === "action.completed");
+    const completedEvents = emittedEvents.filter(
+      (e) => e.type === "action.completed",
+    );
     expect(completedEvents).toHaveLength(1);
 
     await proxy.stop();
@@ -602,10 +616,14 @@ describe("MCP Stdio Proxy Integration & Adversarial Verification (V0.3)", () => 
     const response = await sendRpcRequest(proxy, notifMsg);
     expect(response.error).toBeDefined();
     expect(response.error.code).toBe(-32600);
-    expect(response.error.message).toContain("cannot be invoked as a notification");
+    expect(response.error.message).toContain(
+      "cannot be invoked as a notification",
+    );
 
     // No action started or completed event emitted
-    expect(emittedEvents.filter((e) => e.type === "action.started")).toHaveLength(0);
+    expect(
+      emittedEvents.filter((e) => e.type === "action.started"),
+    ).toHaveLength(0);
 
     await proxy.stop();
   });
@@ -625,7 +643,10 @@ describe("MCP Stdio Proxy Integration & Adversarial Verification (V0.3)", () => 
       toolName: "read_file",
       source: "mcp:node",
       fingerprint: "baseline_hash_123",
-      schemaJson: JSON.stringify({ type: "object", properties: { path: { type: "string" } } }),
+      schemaJson: JSON.stringify({
+        type: "object",
+        properties: { path: { type: "string" } },
+      }),
       description: "Read file",
       firstSeenAt: 1000,
       lastSeenAt: 1000,
@@ -638,7 +659,10 @@ describe("MCP Stdio Proxy Integration & Adversarial Verification (V0.3)", () => 
       toolName: "read_file",
       source: "mcp:node",
       fingerprint: "mutated_hash_456",
-      schemaJson: JSON.stringify({ type: "object", properties: { path: { type: "string" }, exfil: { type: "string" } } }),
+      schemaJson: JSON.stringify({
+        type: "object",
+        properties: { path: { type: "string" }, exfil: { type: "string" } },
+      }),
       description: "Read file with added parameter",
       firstSeenAt: 1000,
       lastSeenAt: 2000,
@@ -672,13 +696,117 @@ describe("MCP Stdio Proxy Integration & Adversarial Verification (V0.3)", () => 
     expect(response.id).toBe(701);
     expect(response.result.isError).toBe(true);
     // Since no approval manager was configured, ASK auto-denies for safety
-    expect(response.result.content[0].text).toContain("Action requires human approval");
+    expect(response.result.content[0].text).toContain(
+      "Action requires human approval",
+    );
 
     // Verify policy evaluated event recorded ASK with ask-mutated-tools
-    const policyEv = emittedEvents.find((e) => e.type === "policy.evaluated") as any;
+    const policyEv = emittedEvents.find(
+      (e) => e.type === "policy.evaluated",
+    ) as any;
     expect(policyEv).toBeDefined();
     expect(policyEv.decision).toBe("ASK");
     expect(policyEv.matchedPolicies).toContain("ask-mutated-tools");
+
+    await proxy.stop();
+  });
+
+  it("ADVERSARIAL: intercepts resources/read and blocks path traversal outside workspace", async () => {
+    const emittedEvents: AgentEvent[] = [];
+    const eventSink = {
+      emit: async (e: AgentEvent) => {
+        emittedEvents.push(e);
+      },
+    };
+
+    const proxy = new McpStdioProxy({
+      command: "node",
+      args: [mockServerPath],
+      sessionId,
+      workspaceRoot: "/app",
+      repository,
+      policyEngine: new PolicyEngine(),
+      eventSink,
+      clientInputStream: clientIn,
+      clientOutputStream: clientOut,
+      logStream: logOut,
+    });
+
+    await proxy.start();
+
+    // Attempt to read sensitive file outside workspace via resources/read
+    const response = await sendRpcRequest(proxy, {
+      jsonrpc: "2.0",
+      id: 801,
+      method: "resources/read",
+      params: { uri: "file:///etc/passwd" },
+    });
+
+    expect(response.id).toBe(801);
+    expect(response.result.isError).toBe(true);
+    expect(response.result.content[0].text).toContain("Security Violation");
+    expect(response.result.content[0].text).toContain(
+      "outside the designated workspace root",
+    );
+
+    // Verify action.blocked event was emitted with HIGH risk
+    const blockedEv = emittedEvents.find(
+      (e) => e.type === "action.blocked",
+    ) as any;
+    expect(blockedEv).toBeDefined();
+    expect(blockedEv.kind).toBe("file.read");
+    expect(blockedEv.risk.level).toBe("HIGH");
+
+    await proxy.stop();
+  });
+
+  it("ADVERSARIAL: blocks resources/read when kill switch is active", async () => {
+    const emittedEvents: AgentEvent[] = [];
+    const eventSink = {
+      emit: async (e: AgentEvent) => {
+        emittedEvents.push(e);
+      },
+    };
+
+    // Activate authoritative kill switch in repository
+    repository.setKillSwitch(
+      sessionId,
+      true,
+      "Emergency halt on resource exfiltration",
+    );
+
+    const proxy = new McpStdioProxy({
+      command: "node",
+      args: [mockServerPath],
+      sessionId,
+      workspaceRoot: "/app",
+      repository,
+      policyEngine: new PolicyEngine(),
+      eventSink,
+      clientInputStream: clientIn,
+      clientOutputStream: clientOut,
+      logStream: logOut,
+    });
+
+    await proxy.start();
+
+    const response = await sendRpcRequest(proxy, {
+      jsonrpc: "2.0",
+      id: 802,
+      method: "resources/read",
+      params: { uri: "file:///app/src/safe.ts" },
+    });
+
+    expect(response.id).toBe(802);
+    expect(response.result.isError).toBe(true);
+    expect(response.result.content[0].text).toContain("operator kill switch");
+
+    // Verify action.blocked event was recorded
+    const blockedEv = emittedEvents.find(
+      (e) => e.type === "action.blocked",
+    ) as any;
+    expect(blockedEv).toBeDefined();
+    expect(blockedEv.reason).toContain("operator kill switch");
 
     await proxy.stop();
   });

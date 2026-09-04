@@ -1,5 +1,5 @@
-import { DETERMINISTIC_RISK_RULES } from './rules.js';
-import { RiskAssessment, RiskFlag, RiskLevel, RiskRule } from './types.js';
+import { DETERMINISTIC_RISK_RULES } from "./rules.js";
+import { RiskAssessment, RiskFlag, RiskLevel, RiskRule } from "./types.js";
 
 export class RiskAnalyzer {
   private rules: RiskRule[];
@@ -11,8 +11,7 @@ export class RiskAnalyzer {
   analyze(
     kind: string,
     params: Record<string, any>,
-    context?: { isOutsideWorkspace?: boolean }
-    context?: { isOutsideWorkspace?: boolean; isToolMutated?: boolean }
+    context?: { isOutsideWorkspace?: boolean; isToolMutated?: boolean },
   ): RiskAssessment {
     const flags: RiskFlag[] = [];
     let totalScore = 0;
@@ -40,18 +39,18 @@ export class RiskAnalyzer {
   }
 
   private calculateLevel(score: number, flags: RiskFlag[]): RiskLevel {
-    if (flags.some((f) => f.severity === 'CRITICAL') || score >= 60) {
-      return 'CRITICAL';
+    if (flags.some((f) => f.severity === "CRITICAL") || score >= 60) {
+      return "CRITICAL";
     }
-    if (flags.some((f) => f.severity === 'HIGH') || score >= 40) {
-      return 'HIGH';
+    if (flags.some((f) => f.severity === "HIGH") || score >= 40) {
+      return "HIGH";
     }
-    if (flags.some((f) => f.severity === 'MEDIUM') || score >= 20) {
-      return 'MEDIUM';
+    if (flags.some((f) => f.severity === "MEDIUM") || score >= 20) {
+      return "MEDIUM";
     }
     if (score > 0) {
-      return 'LOW';
+      return "LOW";
     }
-    return 'NONE';
+    return "NONE";
   }
 }

@@ -236,14 +236,13 @@ export function matchCommand(
   if (!pattern || pattern === "*") return true;
   if (!command) return false;
 
-  const trimmedPattern = pattern.trim();
-  const trimmedCommand = command.trim();
   const trimmedPattern = pattern.trim().replace(/\s+/g, " ");
+  const trimmedCommand = command.trim().replace(/\s+/g, " ");
   const normalizedCommand = normalizeCommand(command);
 
   // Exact match
-  if (trimmedPattern === trimmedCommand) return true;
-  if (trimmedPattern === normalizedCommand) return true;
+  if (trimmedPattern === trimmedCommand || trimmedPattern === normalizedCommand)
+    return true;
 
   // Command prefix glob (e.g. 'git push *' or 'git *')
   if (trimmedPattern.endsWith("*")) {
@@ -251,7 +250,7 @@ export function matchCommand(
     if (
       trimmedCommand === prefix ||
       trimmedCommand.startsWith(`${prefix} `) ||
-      trimmedCommand.startsWith(prefix)
+      trimmedCommand.startsWith(prefix) ||
       normalizedCommand === prefix ||
       normalizedCommand.startsWith(`${prefix} `) ||
       normalizedCommand.startsWith(prefix)
@@ -269,8 +268,8 @@ export function matchCommand(
       .replace(/\?/g, ".") +
     "$";
 
-  return new RegExp(regexStr, "i").test(trimmedCommand);
-  return new RegExp(regexStr, "i").test(normalizedCommand);
+  const rx = new RegExp(regexStr, "i");
+  return rx.test(trimmedCommand) || rx.test(normalizedCommand);
 }
 
 /**
@@ -297,8 +296,6 @@ export function matchesRule(
   }
 
   // 1. Action Kind Match
-  if (!matchActionKind(rule.action, String(action.kind))) {
-    return false;
   const kindStr = String(action.kind);
   if (!matchActionKind(rule.action, kindStr)) {
     // If rule matches file.* and action category is file, allow match

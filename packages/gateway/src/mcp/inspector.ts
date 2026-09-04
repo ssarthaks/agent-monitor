@@ -17,13 +17,8 @@ export class McpResultInspector {
     const sizeBytes = Buffer.byteLength(serialized, "utf8");
 
     // 1. Check for private key leaks in text contents
-    let leakDetected = false;
-    if (
-      serialized.includes("BEGIN RSA PRIVATE KEY") ||
-      serialized.includes("BEGIN OPENSSH PRIVATE KEY")
-    ) {
-      leakDetected = true;
-    }
+    const privateKeyRegex = /BEGIN (RSA |EC |DSA |OPENSSH |PGP )?PRIVATE KEY/i;
+    const leakDetected = privateKeyRegex.test(serialized);
 
     // 2. Truncate oversized results
     if (sizeBytes > MAX_RESULT_BYTES) {
@@ -46,6 +41,24 @@ export class McpResultInspector {
           modified: true,
           result: { ...result, content: modifiedContent },
           warning: "Tool result was truncated to prevent memory exhaustion",
+          sizeBytes,
+        };
+      } else if (Array.isArray(result.contents)) {
+        // Support MCP resources/read contents format
+        const modifiedContents = result.contents.map((item: any) => {
+          if (typeof item.text === "string" && item.text.length > 10000) {
+            return {
+              ...item,
+              text: item.text.slice(0, 10000) + truncatedNotice,
+            };
+          }
+          return item;
+        });
+        return {
+          modified: true,
+          result: { ...result, contents: modifiedContents },
+          warning:
+            "Resource content was truncated to prevent memory exhaustion",
           sizeBytes,
         };
       }

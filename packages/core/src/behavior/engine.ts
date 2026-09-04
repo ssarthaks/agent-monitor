@@ -9,6 +9,14 @@ import {
 } from "./types.js";
 import { DEFAULT_BEHAVIORAL_RULES, isSensitivePath } from "./rules.js";
 
+const MAX_BEHAVIORAL_RECORDS = 200;
+
+function trimArray<T>(arr: T[], limit: number): void {
+  if (arr.length > limit) {
+    arr.splice(0, arr.length - limit);
+  }
+}
+
 export class BehavioralEngine {
   private rules: BehavioralRule[];
   private contexts = new Map<string, BehavioralContext>();
@@ -81,6 +89,7 @@ export class BehavioralEngine {
           timestamp: Date.now(),
           sensitivityReason: sensitivity,
         });
+        trimArray(context.sensitiveReads, MAX_BEHAVIORAL_RECORDS);
       }
     }
 
@@ -91,6 +100,7 @@ export class BehavioralEngine {
         path: action.params.path,
         timestamp: Date.now(),
       });
+      trimArray(context.workspaceWrites, MAX_BEHAVIORAL_RECORDS);
     }
 
     // 3. Check if this is process exec
@@ -100,6 +110,7 @@ export class BehavioralEngine {
         command: action.params.command,
         timestamp: Date.now(),
       });
+      trimArray(context.executedCommands, MAX_BEHAVIORAL_RECORDS);
     }
   }
 

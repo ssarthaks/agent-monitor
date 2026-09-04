@@ -1,42 +1,46 @@
-import { spawn } from 'node:child_process';
-import { ProcessExecParams, ProcessExecResult } from '@agent-monitor/core';
-import { ToolDefinition } from '../runtime.js';
+import { spawn } from "node:child_process";
+import { ProcessExecParams, ProcessExecResult } from "@agent-monitor/core";
+import { ToolDefinition } from "../runtime.js";
 import {
   resolveSafeWorkspacePath,
   DEFAULT_COMMAND_TIMEOUT_MS,
   MAX_COMMAND_OUTPUT_BYTES,
   truncateOutput,
-} from './guardrails.js';
+} from "./guardrails.js";
 
-export const runCommandTool: ToolDefinition<ProcessExecParams, ProcessExecResult> = {
-  name: 'run_command',
-  actionKind: 'process.exec',
-  category: 'process',
-  description: 'Execute a shell command within the workspace directory with timeout and bounded buffer.',
+export const runCommandTool: ToolDefinition<
+  ProcessExecParams,
+  ProcessExecResult
+> = {
+  name: "run_command",
+  actionKind: "process.exec",
+  category: "process",
+  description:
+    "Execute a shell command within the workspace directory with timeout and bounded buffer.",
   parameters: {
-    type: 'object',
+    type: "object",
     properties: {
       command: {
-        type: 'string',
-        description: 'The shell command line to execute',
+        type: "string",
+        description: "The shell command line to execute",
       },
       cwd: {
-        type: 'string',
-        description: 'Optional working subdirectory within workspace',
+        type: "string",
+        description: "Optional working subdirectory within workspace",
       },
       timeoutMs: {
-        type: 'integer',
-        description: 'Command timeout in milliseconds (defaults to 30000)',
+        type: "integer",
+        description: "Command timeout in milliseconds (defaults to 30000)",
       },
     },
-    required: ['command'],
+    required: ["command"],
   },
   execute: async (params, ctx) => {
     let targetCwd = ctx.workspaceRoot;
     if (params.cwd) {
       const { safePath, isOutsideWorkspace, reason } = resolveSafeWorkspacePath(
         params.cwd,
-        ctx.workspaceRoot
+        ctx.workspaceRoot,
       );
       if (isOutsideWorkspace) {
         throw new Error(`Security Violation: Cwd ${reason}`);
@@ -48,29 +52,63 @@ export const runCommandTool: ToolDefinition<ProcessExecParams, ProcessExecResult
     const startTime = Date.now();
 
     return new Promise<ProcessExecResult>((resolve) => {
-      let stdoutBuffer = '';
-      let stderrBuffer = '';
+      let stdoutBuffer = "";
+      let stderrBuffer = "";
       let timedOut = false;
 
-      const isWin = process.platform === 'win32';
-      const shell = isWin ? 'cmd.exe' : '/bin/sh';
-      const shellArgs = isWin ? ['/d', '/s', '/c', params.command] : ['-c', params.command];
+      const isWin = process.platform === "win32";
+      const shell = isWin ? "cmd.exe" : "/bin/sh";
+      const shellArgs = isWin
+        ? ["/d", "/s", "/c", params.command]
+        : ["-c", params.command];
+
+      // Sanitize environment: do not pass parent API keys, secrets, or auth tokens
+      const sensitivePattern =
+        /(KEY|TOKEN|SECRET|AUTH|PASS|CREDENTIAL|PRIVATE|BEARER|DATABASE_URL)/i;
+      const allowedExact = new Set([
+        "PATH",
+        "HOME",
+        "USER",
+        "LOGNAME",
+        "USERNAME",
+        "SHELL",
+        "LANG",
+        "TERM",
+        "TMPDIR",
+        "TEMP",
+        "TMP",
+        "NODE_ENV",
+        "SYSTEMROOT",
+        "COMSPEC",
+        "PATHEXT",
+      ]);
+
+      const childEnv: Record<string, string> = { PAGER: "cat" };
+      for (const [k, v] of Object.entries(process.env)) {
+        if (!v) continue;
+        if (sensitivePattern.test(k)) continue;
+        if (
+          allowedExact.has(k) ||
+          k.startsWith("LC_") ||
+          k.startsWith("npm_config_") ||
+          k.startsWith("NVM_")
+        ) {
+          childEnv[k] = v;
+        }
+      }
 
       const child = spawn(shell, shellArgs, {
         cwd: targetCwd,
-        env: {
-          ...process.env,
-          PAGER: 'cat',
-        },
+        env: childEnv,
       });
 
       const timer = setTimeout(() => {
         timedOut = true;
         try {
-          child.kill('SIGTERM');
+          child.kill("SIGTERM");
           setTimeout(() => {
             if (!child.killed) {
-              child.kill('SIGKILL');
+              child.kill("SIGKILL");
             }
           }, 1000);
         } catch {
@@ -78,32 +116,40 @@ export const runCommandTool: ToolDefinition<ProcessExecParams, ProcessExecResult
         }
       }, timeoutMs);
 
-      child.stdout.on('data', (data) => {
-        if (Buffer.byteLength(stdoutBuffer, 'utf8') < MAX_COMMAND_OUTPUT_BYTES * 2) {
-          stdoutBuffer += data.toString('utf8');
+      child.stdout.on("data", (data) => {
+        if (
+          Buffer.byteLength(stdoutBuffer, "utf8") <
+          MAX_COMMAND_OUTPUT_BYTES * 2
+        ) {
+          stdoutBuffer += data.toString("utf8");
         }
       });
 
-      child.stderr.on('data', (data) => {
-        if (Buffer.byteLength(stderrBuffer, 'utf8') < MAX_COMMAND_OUTPUT_BYTES * 2) {
-          stderrBuffer += data.toString('utf8');
+      child.stderr.on("data", (data) => {
+        if (
+          Buffer.byteLength(stderrBuffer, "utf8") <
+          MAX_COMMAND_OUTPUT_BYTES * 2
+        ) {
+          stderrBuffer += data.toString("utf8");
         }
       });
 
-      child.on('error', (err) => {
+      child.on("error", (err) => {
         clearTimeout(timer);
         const durationMs = Date.now() - startTime;
         resolve({
           command: params.command,
           stdout: truncateOutput(stdoutBuffer),
-          stderr: truncateOutput(`Process spawn error: ${err.message}\n${stderrBuffer}`),
+          stderr: truncateOutput(
+            `Process spawn error: ${err.message}\n${stderrBuffer}`,
+          ),
           exitCode: 1,
           durationMs,
           timedOut,
         });
       });
 
-      child.on('close', (code) => {
+      child.on("close", (code) => {
         clearTimeout(timer);
         const durationMs = Date.now() - startTime;
 

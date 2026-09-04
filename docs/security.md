@@ -1,31 +1,40 @@
-# Security Model & Guardrails
+# Security Model & Universal Agent Control Boundary (V0.3)
 
-Agent Monitor provides **deterministic safety guardrails, pre-execution risk analysis, and human approval gates** for AI agents.
+Agent Monitor provides a **deterministic control plane, pre-execution risk analysis, MCP proxy interception, and human approval gates** for AI coding agents.
 
 ---
 
-## 1. Security Architecture Overview
+## 1. Non-Negotiable Core Security Invariant
 
-Agent Monitor operates as an **interception layer** between the autonomous agent and the host operating system.
+For every external agent or tool action that can cause filesystem, process, network, or other side effects:
 
 ```text
-AI Tool Request
-      │
-      ▼
-[ Workspace Containment ]  ──► Path Traversal? Symlink Escape? (Blocked if outside)
-      │
-      ▼
-[ Deterministic Risk ]     ──► Analyzes 8 CWE Vectors (Scores 0–100)
-      │
-      ▼
-[ Policy Engine ]          ──► Evaluates Specificity & Safety Precedence (ALLOW / ASK / DENY)
-      │
-      ▼
-[ Human Approval Gate ]    ──► Genuinely pauses on ASK (Terminal / Web UI)
-      │
-      ▼
-[ Tool Execution ]         ──► Executes tool with timeout & output caps
+REQUEST
+  ↓
+KILL SWITCH CHECK
+  ↓
+NORMALIZATION
+  ↓
+WORKSPACE / GUARDRAIL VALIDATION
+  ↓
+RISK ANALYSIS
+  ↓
+POLICY EVALUATION
+  ↓
+HUMAN APPROVAL IF ASK
+  ↓
+POST-APPROVAL KILL SWITCH CHECK
+  ↓
+EXECUTION
+  ↓
+RESULT INSPECTION
+  ↓
+SQLITE PERSISTENCE
+  ↓
+CLIENT RESPONSE
 ```
+
+No tool or resource read can bypass any step in this chain.
 
 ---
 
@@ -33,55 +42,59 @@ AI Tool Request
 
 ### A. Workspace Path Normalization & Containment
 
-All file-based actions (`file.read`, `file.write`, `file.list`) are resolved against the designated `workspaceRoot`.
+All file-based actions (`file.read`, `file.write`, `file.list`, `resources/read`) are resolved against the designated `workspaceRoot`.
 
-- `resolveSafeWorkspacePath` resolves `..` segments and compares the absolute canonical path against `workspaceRoot`.
-- Paths resolving outside the workspace root (e.g. `../../etc/passwd`) are flagged with `isOutsideWorkspace: true`.
+- Component-aware path resolution handles POSIX forward slashes, Windows backslashes (`\ -> /`), and URL-encoded traversals (`%2e%2e%2f`).
+- Paths resolving outside the workspace root (e.g. `../../etc/passwd` or `subdir\..\..\..\etc\passwd`) are flagged with `isOutsideWorkspace: true`.
 - The built-in policy `deny-outside-workspace` immediately blocks any action resolving outside the workspace with `DENY`.
 
-### B. Symlink Verification
+### B. Symlink Escape Verification
 
-- For existing files and folders, `fs.realpathSync` resolves symbolic links to ensure the symlink target remains strictly within the workspace directory.
-- If a symlink points to an external path (e.g. `/etc` or `~/.ssh`), it is classified as outside the workspace boundary.
+- For existing files and folders, `fs.realpathSync` resolves symbolic links to verify that targets remain strictly within the workspace root.
+- If a symlink points to an external path (e.g. `/etc` or `~/.ssh`), it is blocked with `DENY`.
 
-### C. Resource & Output Limits
+### C. Child Process Environment Sanitization
 
-- **File Operations**: Maximum read/write size limit (default: 5MB) prevents memory exhaustion.
-- **Process Execution**: Command execution has a strict timeout (default: 60s) and stdout/stderr output caps (default: 500KB) to prevent runaway loops.
-
----
-
-## 3. Deterministic Risk Analysis (CWE Mapping)
-
-Before policy evaluation, the `RiskAnalyzer` computes a numeric risk score (**0 to 100**) mapped to Common Weakness Enumerations (CWE):
-
-| Rule ID                    | Vector           | Severity   | Score | CWE ID  | Description                                                   |
-| :------------------------- | :--------------- | :--------- | :---: | :------ | :------------------------------------------------------------ |
-| `SEC_DOTENV`               | Dotenv Access    | `HIGH`     |  40   | CWE-200 | Reading or writing `.env` files containing secrets.           |
-| `SEC_SSH_KEYS`             | SSH Keys         | `CRITICAL` |  80   | CWE-522 | Accessing `~/.ssh` or private key files (`id_rsa`, `.pem`).   |
-| `SEC_CREDENTIALS`          | Credentials      | `HIGH`     |  50   | CWE-798 | Accessing files named `credentials`, `secrets.json`, `.aws/`. |
-| `CMD_DESTRUCTIVE_RM`       | Recursive Delete | `CRITICAL` |  60   | CWE-73  | Executing `rm -rf` on root or wildcard targets.               |
-| `CMD_PRIVILEGE_ESCALATION` | Sudo / Su        | `CRITICAL` |  75   | CWE-250 | Executing `sudo`, `su`, or `chown root`.                      |
-| `CMD_NETWORK_OUTBOUND`     | Network Download | `MEDIUM`   |  25   | CWE-494 | Executing `curl`, `wget`, `nc`, or `ssh`.                     |
-| `PATH_TRAVERSAL`           | Path Traversal   | `CRITICAL` |  90   | CWE-22  | Attempting to access files outside the workspace root.        |
-| `GIT_INTERNAL_ACCESS`      | Git Internals    | `LOW`      |  15   | CWE-200 | Direct access to `.git/` internal objects.                    |
+- Executed commands do not inherit parent environment variables containing sensitive secrets, API keys, tokens, or credentials (`KEY`, `TOKEN`, `SECRET`, `AUTH`, `PASS`, `CREDENTIAL`).
+- Only sanitized system variables (`PATH`, `HOME`, `SHELL`, `LANG`, `TMPDIR`, `TERM`) are forwarded.
 
 ---
 
-## 4. Honest Security Boundaries & Limitations
+## 3. Universal MCP Stdio Proxy Guardrails
 
-> [!IMPORTANT]
-> **Agent Monitor V0.2 is a deterministic policy gate and developer control plane — it is NOT an OS-level virtualization sandbox (such as Docker, gVisor, or MicroVMs).**
+### A. Strict Byte-Buffer JSON-RPC Framing
 
-### What Agent Monitor Protects Against:
+- The MCP stdio proxy operates on pure Node.js byte buffers (`Buffer`), eliminating character-count vs. byte-length desynchronization attacks on multi-byte UTF-8 sequences.
+- `Content-Length` headers are strictly validated: non-numeric, negative, and oversized (`> 10MB`) lengths are rejected, clearing the desynchronized buffer to prevent HTTP/RPC request smuggling.
 
-- ✅ Accidental or hallucinated reads of `.env` files and SSH keys.
-- ✅ Accidental `git push` or destructive `rm -rf` commands during automated workflows.
-- ✅ Direct path traversal escapes via relative paths (`../../etc/passwd`).
-- ✅ Unmonitored or silent agent mutations without human awareness.
+### B. Universal Control Plane Interception
 
-### What Agent Monitor Does NOT Protect Against (Threat Model):
+- Both `tools/call` and `resources/read` are intercepted and routed through the control boundary.
+- File URIs (`file:///...`) and relative resource paths are extracted, normalized, and validated against workspace boundaries.
 
-- ❌ **Obfuscated Shell Attacks**: A command like `bash -c "$(echo cm0gLXJmIC8= | base64 -d)"` executes via bash. (Process-level sandboxing is planned for future versions).
-- ❌ **Adversarial Kernel Exploits**: Agent Monitor runs with the permissions of the host user running the CLI.
-- ❌ **Network Layer Evasion**: Non-shell outbound network calls initiated by external binaries.
+### C. Tool Fingerprinting & Schema Rug-Pull Detection
+
+- External tool definitions from `tools/list` are SHA-256 fingerprinted and persisted in SQLite.
+- If a downstream MCP server dynamically mutates tool schema or parameters at runtime (a tool rug-pull), the tool is flagged as mutated and requires mandatory human approval (`ask-mutated-tools`).
+
+### D. Result Inspection & Leak Prevention
+
+- Responses from downstream MCP tools and resources are inspected prior to returning to the agent.
+- Cryptographic private keys (`BEGIN RSA/EC/DSA/OPENSSH/PGP PRIVATE KEY`) are detected and flagged.
+- Oversized outputs are safely truncated to 500KB to protect memory integrity.
+
+---
+
+## 4. Authoritative Local Circuit Breaker (Kill Switch)
+
+- The operator kill switch is maintained authoritatively in SQLite.
+- Checked both prior to policy evaluation and immediately post-approval to eliminate race conditions.
+- When activated, all pending and incoming tool executions and resource reads are immediately rejected.
+
+---
+
+## 5. Local Server CORS & Origin Hardening
+
+- The MonitorServer REST/SSE endpoints restrict cross-origin requests.
+- Requests with untrusted external `Origin` headers (e.g. `https://evil.com`) are rejected with `403 Forbidden` to prevent malicious browser-based drive-by commands.
+- Local origins (`localhost`, `127.0.0.1`, `[::1]`) and direct non-browser requests (CLI, curl) are permitted.

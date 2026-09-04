@@ -139,4 +139,34 @@ describe("Server REST APIs for Approvals & Policy (Phase D)", () => {
     expect(data.approvals.length).toBe(1);
     expect(data.approvals[0].id).toBe("app_list_01");
   });
+
+  it("blocks untrusted cross-origin requests with 403 Forbidden", async () => {
+    // 1. Cross-origin request from an untrusted site (e.g. evil.com)
+    const resEvil = await fetch(`${serverUrl}/policy`, {
+      headers: { Origin: "https://evil.com" },
+    });
+    expect(resEvil.status).toBe(403);
+    const evilData = await resEvil.json();
+    expect(evilData.error).toContain("Forbidden");
+    expect(resEvil.headers.get("Access-Control-Allow-Origin")).toBeNull();
+
+    // 2. Preflight OPTIONS from evil.com
+    const resOptions = await fetch(
+      `${serverUrl}/approvals/app_http_01/approve`,
+      {
+        method: "OPTIONS",
+        headers: { Origin: "https://evil.com" },
+      },
+    );
+    expect(resOptions.status).toBe(403);
+
+    // 3. Allowed localhost origin
+    const resLocal = await fetch(`${serverUrl}/policy`, {
+      headers: { Origin: "http://localhost:3000" },
+    });
+    expect(resLocal.status).toBe(200);
+    expect(resLocal.headers.get("Access-Control-Allow-Origin")).toBe(
+      "http://localhost:3000",
+    );
+  });
 });
