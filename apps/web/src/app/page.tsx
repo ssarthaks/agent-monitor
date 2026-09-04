@@ -4,10 +4,14 @@ import React, { useState, useEffect, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { useSessionStream, ActionItem } from "@/hooks/useSessionStream";
 import { Header } from "@/components/Header";
+import { Header, DashboardTab } from "@/components/Header";
 import { MetricCards } from "@/components/MetricCards";
 import { Timeline } from "@/components/Timeline";
 import { Inspector } from "@/components/Inspector";
 import { ApprovalModal } from "@/components/ApprovalModal";
+import { IncidentsView } from "@/components/IncidentsView";
+import { McpSourcesView } from "@/components/McpSourcesView";
+import { PoliciesView } from "@/components/PoliciesView";
 import {
   MessageSquare,
   Bot,
@@ -30,6 +34,7 @@ function DashboardContent() {
   const [activeMetricFilter, setActiveMetricFilter] = useState<string | null>(
     null,
   );
+  const [activeTab, setActiveTab] = useState<DashboardTab>("timeline");
   const [copiedCli, setCopiedCli] = useState(false);
 
   const {
@@ -80,6 +85,8 @@ function DashboardContent() {
         events={events}
         onKill={killSession}
         onResume={resumeSession}
+        activeTab={activeTab}
+        onSelectTab={setActiveTab}
       />
 
       {error && (
@@ -111,10 +118,30 @@ function DashboardContent() {
         activeFilter={activeMetricFilter}
         onSelectFilter={setActiveMetricFilter}
       />
+      {/* Conditional View by Tab */}
+      {activeTab === "incidents" ? (
+        <IncidentsView sessionId={selectedSessionId} />
+      ) : activeTab === "mcp" ? (
+        <McpSourcesView />
+      ) : activeTab === "policies" ? (
+        <PoliciesView />
+      ) : (
+        <>
+          {/* Metric summary counters */}
+          <MetricCards
+            actions={actions}
+            session={session}
+            events={events}
+            activeFilter={activeMetricFilter}
+            onSelectFilter={setActiveMetricFilter}
+          />
 
       {/* Welcome Screen or Live Timeline/Inspector */}
       {!session && actions.length === 0 ? (
         <div className="flex-1 px-4 sm:px-6 py-6 sm:py-10 flex items-center justify-center">
+          {/* Welcome Screen or Live Timeline/Inspector */}
+          {!session && actions.length === 0 ? (
+            <div className="flex-1 px-4 sm:px-6 py-6 sm:py-10 flex items-center justify-center">
           <div className="max-w-xl w-full text-center space-y-6 p-6 sm:p-8 rounded bg-white border border-alabaster-borderDark shadow-sm">
             <div className="w-14 h-14 rounded bg-ink text-terracotta flex items-center justify-center mx-auto shadow-sm">
               <Activity className="w-7 h-7" />
@@ -238,6 +265,8 @@ function DashboardContent() {
               <Inspector action={selectedAction} />
             </div>
           </main>
+            </>
+          )}
         </>
       )}
     </div>

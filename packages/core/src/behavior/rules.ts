@@ -176,11 +176,111 @@ export const WORKSPACE_MOD_TO_NETWORK_RULE: BehavioralRule = {
   },
 };
 
+/**
+ * Rule 5: Mutated tool definition followed by sensitive credential read
+ */
+export const MUTATION_TO_READ_RULE: BehavioralRule = {
+  id: "SEC_MUTATION_TO_READ",
+  name: "Tool Mutation to Sensitive Read",
+  description:
+    "Detects sensitive credential or secret access following an unapproved tool schema mutation",
+  severity: "CRITICAL",
+  evaluate(context, action) {
+    if (context.mutatedTools.length === 0) return null;
+    if (action.kind !== "file.read") return null;
+
+    const path = action.params?.path || "";
+    const sensitivity = isSensitivePath(path);
+    if (!sensitivity) return null;
+
+    const lastMutation = context.mutatedTools[context.mutatedTools.length - 1];
+    return {
+      ruleId: "SEC_MUTATION_TO_READ",
+      name: "Tool Mutation to Sensitive Read",
+      severity: "CRITICAL",
+      reason: `Sensitive credential read detected (${path}) following tool schema mutation of '${lastMutation.toolName}'`,
+      triggeringActionId: action.actionId || "",
+      triggeringActionKind: action.kind,
+      priorActionIds: context.mutatedTools.map((m) => m.actionId),
+      timestamp: Date.now(),
+    };
+  },
+};
+
+/**
+ * Rule 6: Workspace traversal attempt followed by command execution
+ */
+export const TRAVERSAL_TO_EXEC_RULE: BehavioralRule = {
+  id: "SEC_TRAVERSAL_TO_EXEC",
+  name: "Workspace Traversal to Command Execution",
+  description:
+    "Detects shell command execution following a blocked workspace traversal attempt",
+  severity: "HIGH",
+  evaluate(context, action) {
+    if (action.kind !== "process.exec") return null;
+    const traversalBlocks = context.blockedActions.filter(
+      (b) =>
+        b.reason.toLowerCase().includes("workspace") ||
+        b.reason.toLowerCase().includes("traversal") ||
+        b.reason.toLowerCase().includes("rfc 8089"),
+    );
+    if (traversalBlocks.length === 0) return null;
+
+    const lastTraversal = traversalBlocks[traversalBlocks.length - 1];
+    return {
+      ruleId: "SEC_TRAVERSAL_TO_EXEC",
+      name: "Workspace Traversal to Command Execution",
+      severity: "HIGH",
+      reason: `Command execution detected following blocked workspace traversal: ${lastTraversal.reason}`,
+      triggeringActionId: action.actionId || "",
+      triggeringActionKind: action.kind,
+      priorActionIds: traversalBlocks.map((b) => b.actionId),
+      timestamp: Date.now(),
+    };
+  },
+};
+
+/**
+ * Rule 7: Repeated policy denials followed by alternative tool probe
+ */
+export const DENIAL_TO_ALTERNATIVE_RULE: BehavioralRule = {
+  id: "SEC_DENIAL_TO_ALTERNATIVE",
+  name: "Repeated Denials to Tool Probe",
+  description:
+    "Detects switching to alternative tools or actions after multiple policy denials",
+  severity: "HIGH",
+  evaluate(context, action) {
+    if (context.blockedActions.length < 2) return null;
+
+    // Check if the current action is different in kind or tool from prior blocked actions
+    const priorBlockedKinds = new Set(
+      context.blockedActions.map((b) => b.kind),
+    );
+    const isProbe = !priorBlockedKinds.has(action.kind);
+
+    if (!isProbe) return null;
+
+    return {
+      ruleId: "SEC_DENIAL_TO_ALTERNATIVE",
+      name: "Repeated Denials to Tool Probe",
+      severity: "HIGH",
+      reason: `Probing alternative action '${action.kind}' after ${context.blockedActions.length} policy denials`,
+      triggeringActionId: action.actionId || "",
+      triggeringActionKind: action.kind,
+      priorActionIds: context.blockedActions.map((b) => b.actionId),
+      timestamp: Date.now(),
+    };
+  },
+};
+
 export const DEFAULT_BEHAVIORAL_RULES: BehavioralRule[] = [
   SENSITIVE_TO_NETWORK_RULE,
   SENSITIVE_TO_EXEC_RULE,
   SENSITIVE_TO_GIT_PUSH_RULE,
   WORKSPACE_MOD_TO_NETWORK_RULE,
+  MUTATION_TO_READ_RULE,
+  TRAVERSAL_TO_EXEC_RULE,
+  DENIAL_TO_ALTERNATIVE_RULE,
 ];
 
 export { isSensitivePath };

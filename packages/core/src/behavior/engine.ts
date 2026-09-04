@@ -33,6 +33,8 @@ export class BehavioralEngine {
         sensitiveReads: [],
         workspaceWrites: [],
         executedCommands: [],
+        blockedActions: [],
+        mutatedTools: [],
         priorMatches: [],
       };
       this.contexts.set(sessionId, ctx);
@@ -114,6 +116,40 @@ export class BehavioralEngine {
     }
   }
 
+  recordBlockedAction(
+    sessionId: string,
+    action: {
+      actionId: string;
+      kind: string;
+      reason: string;
+    },
+  ): void {
+    const context = this.getContext(sessionId);
+    context.blockedActions.push({
+      actionId: action.actionId,
+      kind: action.kind,
+      reason: action.reason,
+      timestamp: Date.now(),
+    });
+    trimArray(context.blockedActions, MAX_BEHAVIORAL_RECORDS);
+  }
+
+  recordToolMutation(
+    sessionId: string,
+    mutation: {
+      actionId: string;
+      toolName: string;
+    },
+  ): void {
+    const context = this.getContext(sessionId);
+    context.mutatedTools.push({
+      actionId: mutation.actionId,
+      toolName: mutation.toolName,
+      timestamp: Date.now(),
+    });
+    trimArray(context.mutatedTools, MAX_BEHAVIORAL_RECORDS);
+  }
+
   /**
    * Reconstructs behavioral session state from historical events (e.g. loaded from SQLite).
    * Ensures that process restarts or multiple processes observing the same session maintain sequence awareness.
@@ -123,9 +159,12 @@ export class BehavioralEngine {
     events: Array<{
       type: string;
       actionId?: string;
+      id?: string;
       kind?: string;
+      toolName?: string;
       category?: string;
       params?: Record<string, any>;
+      reason?: string;
       timestamp?: number;
     }>,
   ): void {
@@ -158,6 +197,21 @@ export class BehavioralEngine {
           });
           trimArray(context.executedCommands, MAX_BEHAVIORAL_RECORDS);
         }
+      } else if (evt.type === "action.blocked" && evt.actionId) {
+        context.blockedActions.push({
+          actionId: evt.actionId,
+          kind: evt.kind || "unknown",
+          reason: evt.reason || "Blocked action",
+          timestamp: evt.timestamp || Date.now(),
+        });
+        trimArray(context.blockedActions, MAX_BEHAVIORAL_RECORDS);
+      } else if (evt.type === "tool.changed") {
+        context.mutatedTools.push({
+          actionId: evt.id || evt.actionId || "tool-mutation",
+          toolName: evt.toolName || "unknown",
+          timestamp: evt.timestamp || Date.now(),
+        });
+        trimArray(context.mutatedTools, MAX_BEHAVIORAL_RECORDS);
       }
     }
   }

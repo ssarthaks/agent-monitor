@@ -21,11 +21,26 @@ export interface ProcessExecRecord {
   timestamp: number;
 }
 
+export interface BlockedActionRecord {
+  actionId: string;
+  kind: string;
+  reason: string;
+  timestamp: number;
+}
+
+export interface MutatedToolRecord {
+  actionId: string;
+  toolName: string;
+  timestamp: number;
+}
+
 export interface BehavioralContext {
   sessionId: string;
   sensitiveReads: SensitiveAccessRecord[];
   workspaceWrites: WorkspaceWriteRecord[];
   executedCommands: ProcessExecRecord[];
+  blockedActions: BlockedActionRecord[];
+  mutatedTools: MutatedToolRecord[];
   priorMatches: BehavioralMatch[];
 }
 

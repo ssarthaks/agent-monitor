@@ -20,6 +20,45 @@ export interface PolicyRule {
   agentId?: string;
   maxRiskScore?: number;
   when?: PolicyRuleWhen;
+  enabled?: boolean; // Default: true. If false, rule is bypassed in evaluation
+}
+
+export interface PolicyVersion {
+  id: string;
+  versionNumber: number;
+  name: string;
+  description?: string;
+  rules: PolicyRule[];
+  defaultDecision: PolicyDecision;
+  timeoutMs: number;
+  isActive: boolean;
+  createdAt: number;
+  createdBy: string;
+  changeSummary?: string;
+  hash: string;
+}
+
+export interface PolicyVersionDiff {
+  versionA: number;
+  versionB: number;
+  addedRules: PolicyRule[];
+  removedRules: PolicyRule[];
+  modifiedRules: {
+    ruleId: string;
+    before: PolicyRule;
+    after: PolicyRule;
+    changes: string[];
+  }[];
+  defaultDecisionChanged?: { before: PolicyDecision; after: PolicyDecision };
+}
+
+export interface PolicyMutationAudit {
+  id: string;
+  versionId: string;
+  action: "created" | "activated" | "rolled_back" | "rule_toggled";
+  actor: string;
+  timestamp: number;
+  details: Record<string, any>;
 }
 
 export interface PolicyConfig {

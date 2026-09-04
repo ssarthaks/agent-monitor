@@ -1,7 +1,7 @@
 {
   "name": "@agent-monitor/gateway",
-  "version": "0.3.0",
-  "description": "Universal Agent Control Boundary & Transparent MCP Proxy for Agent Monitor (V0.3)",
+  "version": "4.1.0",
+  "description": "Universal Agent Control Boundary & Transparent MCP Proxy for Agent Monitor (V4.0.0)",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -18,9 +18,9 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@agent-monitor/core": "^0.3.0",
-    "@agent-monitor/server": "^0.3.0",
-    "@agent-monitor/agent": "^0.3.0",
+    "@agent-monitor/core": "^4.1.0",
+    "@agent-monitor/server": "^4.1.0",
+    "@agent-monitor/agent": "^4.1.0",
     "picocolors": "^1.1.1"
   },
   "devDependencies": {

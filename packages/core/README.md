@@ -15,21 +15,30 @@ Core domain models, event interfaces, deterministic risk analysis, and additive 
 - **`normalization/`**:
   - `ActionNormalizer`: Canonical action mapping from arbitrary MCP tool calls, raw process commands, and resource URIs into strongly-typed action intents.
 - **`behavior/`**:
-  - `BehavioralEngine`: Correlates multi-step action sequences across a session (e.g. sensitive file reads followed by network egress or process execution) with sliding window memory bounds.
+  - `BehavioralEngine`: Correlates multi-step action sequences across a session (`SEC_MUTATION_TO_READ`, `SEC_TRAVERSAL_TO_EXEC`, `SEC_DENIAL_TO_ALTERNATIVE`, `SEC_SENSITIVE_TO_NETWORK`) with sliding window memory bounds.
 - **`fingerprint/`**:
   - `computeToolFingerprint`: Cryptographic SHA-256 fingerprinting of external tool schemas for runtime mutation (rug-pull) detection.
 - **`policy/`**:
   - `PolicyEngine`: Synchronous evaluation engine with additive rule specificity.
+  - `versioning`: Policy version models, immutable SHA-256 content hashing, diff computation, and rollbacks.
   - `matcher`: Glob and command pattern matching (`**/*.secret`, `git push *`).
   - `defaults`: Built-in default secure rules (`ALLOW`, `DENY`, `ASK`).
 - **`risk/`**:
   - `RiskAnalyzer`: Evaluates pre-execution risk scores (0–100) mapped to CWE categories.
+  - `SessionRiskEngine`: Aggregates multi-action session risk with factor explainability breakdown.
+- **`incidents/`**:
+  - `SecurityIncident`: Case model, severity levels, triage status, and correlated event schema.
+- **`audit/`**:
+  - `computeEventHash`, `verifyEventChain`: Cryptographic SHA-256 event hash chaining and tamper detection.
+- **`mcp/`**:
+  - Downstream MCP source interfaces, health metrics, and quarantine status.
 - **`events/`**:
-  - Complete domain event types (`session.*`, `policy.evaluated`, `approval.*`, `action.*`, `tool.discovered`, `tool.changed`, `behavioral.match`).
+  - Complete domain event types and cryptographic hash chaining interfaces.
 - **`actions/`**:
   - Canonical action models (`ActionKind`, `ActionCategory`).
 - **`approvals/`**:
   - Approval status and request types.
+
 
 ---
 

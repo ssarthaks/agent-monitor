@@ -18,7 +18,9 @@ import {
   ApprovalResolvedEvent,
   ToolDiscoveredEvent,
   ToolChangedEvent,
+  computeActionContextHash,
 } from "@agent-monitor/core";
+
 import { SessionRepository } from "@agent-monitor/server";
 import {
   ApprovalManager,
@@ -42,6 +44,7 @@ import {
   isJsonRpcResponse,
 } from "./jsonrpc.js";
 import { McpResultInspector } from "./inspector.js";
+import { RateLimiter } from "./ratelimit.js";
 
 export class McpStdioProxy implements ToolGateway {
   private options: McpProxyOptions;
@@ -49,6 +52,7 @@ export class McpStdioProxy implements ToolGateway {
   private running = false;
   private clientParser = new JsonRpcStreamParser();
   private downstreamParser = new JsonRpcStreamParser();
+  private rateLimiter: RateLimiter;
 
   private pendingClientRequests = new Map<
     string | number,
@@ -60,6 +64,7 @@ export class McpStdioProxy implements ToolGateway {
       actionId?: string;
       isOutsideWorkspace?: boolean;
       isToolMutated?: boolean;
+      timeoutTimer?: NodeJS.Timeout;
     }
   >();
 
@@ -72,8 +77,10 @@ export class McpStdioProxy implements ToolGateway {
       clientInputStream: process.stdin,
       clientOutputStream: process.stdout,
       logStream: process.stderr,
+      requestTimeoutMs: 30000,
       ...options,
     };
+    this.rateLimiter = new RateLimiter(this.options.rateLimitPerMinute || 120);
   }
 
   private generateId(prefix: string): string {
@@ -110,6 +117,20 @@ export class McpStdioProxy implements ToolGateway {
       env: { ...process.env, ...this.options.env },
       stdio: ["pipe", "pipe", "inherit"], // child stderr passes through to terminal stderr
     });
+
+    const sourceId = `mcp:${this.options.serverName || this.options.command}`;
+    try {
+      this.options.repository.upsertMcpSource({
+        sourceId,
+        name: this.options.serverName || this.options.command,
+        command: this.options.command,
+        args: this.options.args || [],
+        env: this.options.env,
+        cwd: workingDir,
+        status: "HEALTHY",
+        pid: this.childProcess.pid || null,
+      });
+    } catch {}
 
     this.running = true;
 
@@ -161,7 +182,13 @@ export class McpStdioProxy implements ToolGateway {
         ),
       );
       this.running = false;
+      try {
+        this.options.repository.recordSourceHealth(sourceId, {
+          crashed: code !== 0 && code !== null,
+        });
+      } catch {}
       for (const [id, pending] of this.pendingClientRequests.entries()) {
+        if (pending.timeoutTimer) clearTimeout(pending.timeoutTimer);
         pending.resolve(
           createJsonRpcError(
             id,
@@ -179,7 +206,13 @@ export class McpStdioProxy implements ToolGateway {
           `[Gateway Error] Downstream child process error: ${err.message}`,
         ),
       );
+      try {
+        this.options.repository.recordSourceHealth(sourceId, {
+          failed: true,
+        });
+      } catch {}
       for (const [id, pending] of this.pendingClientRequests.entries()) {
+        if (pending.timeoutTimer) clearTimeout(pending.timeoutTimer);
         pending.resolve(
           createJsonRpcError(
             id,
@@ -282,6 +315,22 @@ export class McpStdioProxy implements ToolGateway {
       );
     }
 
+    // Rate Limiting for actionable requests (tools/call, resources/read)
+    if (msg.method === "tools/call" || msg.method === "resources/read") {
+      if (!this.rateLimiter.isAllowed(this.options.sessionId)) {
+        this.log(
+          pc.yellow(
+            `[Gateway Warning] Rate limit exceeded for session: ${this.options.sessionId}`,
+          ),
+        );
+        return createJsonRpcError(
+          msg.id ?? null,
+          -32000,
+          "Rate limit exceeded: maximum requests per minute reached for this session",
+        );
+      }
+    }
+
     // A. Intercept tools/call
     if (msg.method === "tools/call") {
       // Notification on tools/call is forbidden in MCP (an 'id' is required)
@@ -353,10 +402,29 @@ export class McpStdioProxy implements ToolGateway {
     request: JsonRpcRequest,
   ): Promise<JsonRpcResponse> {
     return new Promise<JsonRpcResponse>((resolve) => {
+      const timeoutMs = this.options.requestTimeoutMs || 30000;
+      let timeoutTimer: NodeJS.Timeout | undefined;
+      if (timeoutMs > 0) {
+        timeoutTimer = setTimeout(() => {
+          const pending = this.pendingClientRequests.get(request.id);
+          if (pending) {
+            this.pendingClientRequests.delete(request.id);
+            pending.resolve(
+              createJsonRpcError(
+                request.id,
+                -32000,
+                `Request timed out after ${timeoutMs}ms`,
+              ),
+            );
+          }
+        }, timeoutMs);
+      }
+
       this.pendingClientRequests.set(request.id, {
         request,
         resolve,
         startTime: Date.now(),
+        timeoutTimer,
       });
       this.forwardToDownstream(request);
     });
@@ -410,6 +478,15 @@ export class McpStdioProxy implements ToolGateway {
     const rawParams = request.params || {};
     const toolName = String(rawParams.name || "unknown");
     const toolArgs = rawParams.arguments || {};
+    // 0. Payload Size Bounding (1MB limit)
+    const serializedArgs = JSON.stringify(toolArgs);
+    if (Buffer.byteLength(serializedArgs, "utf8") > 1024 * 1024) {
+      return createJsonRpcError(
+        request.id,
+        -32602,
+        "Tool arguments exceed maximum allowed payload size of 1MB",
+      );
+    }
     const actionId = this.generateId("act");
     const startTime = Date.now();
 
@@ -467,6 +544,59 @@ export class McpStdioProxy implements ToolGateway {
             {
               type: "text",
               text: "Execution blocked: Session was killed by operator kill switch",
+            },
+          ],
+        },
+      };
+    }
+
+    // 1b. Authoritative Source Quarantine Check
+    const sourceId = `mcp:${this.options.serverName || this.options.command}`;
+    if (this.options.repository.isSourceQuarantined(sourceId)) {
+      const blockedEvent: ActionBlockedEvent = {
+        id: this.generateId("evt"),
+        sequence: this.options.repository.getNextSequence(
+          this.options.sessionId,
+        ),
+        sessionId: this.options.sessionId,
+        agentId: this.options.agentId || "mcp-client",
+        timestamp: Date.now(),
+        type: "action.blocked",
+        actionId,
+        kind: toolName,
+        category: "custom",
+        params: toolArgs,
+        reason: `Execution blocked: Source '${sourceId}' is quarantined by security operator`,
+        risk: {
+          level: "CRITICAL",
+          score: 100,
+          flags: [
+            {
+              ruleId: "SOURCE_QUARANTINED",
+              description: `MCP source '${sourceId}' is in quarantined state`,
+              severity: "CRITICAL",
+              scoreImpact: 100,
+            },
+          ],
+        },
+        policy: {
+          decision: "DENY",
+          matchedPolicies: ["source-quarantined"],
+          reason: `Source '${sourceId}' is quarantined`,
+        },
+      };
+
+      await this.options.eventSink.emit(blockedEvent);
+
+      return {
+        jsonrpc: "2.0",
+        id: request.id,
+        result: {
+          isError: true,
+          content: [
+            {
+              type: "text",
+              text: `Execution blocked: MCP source '${sourceId}' is quarantined by security operator`,
             },
           ],
         },
@@ -665,6 +795,19 @@ export class McpStdioProxy implements ToolGateway {
       }
 
       const approvalId = this.generateId("app");
+      const initialPolicyVersion =
+        this.options.policyEngine.getVersion?.() ?? 1;
+      const timeoutMs = this.options.policyEngine.getTimeoutMs?.() ?? 300000;
+      const expiresAt = Date.now() + timeoutMs;
+      const actionContextHash = computeActionContextHash({
+        sessionId: this.options.sessionId,
+        actionKind: canonical.kind,
+        params: canonical.params,
+        source: sourceId,
+        policyVersion: initialPolicyVersion,
+        riskScore: risk.score,
+      });
+
       const approvalReq = {
         id: approvalId,
         actionId,
@@ -677,6 +820,9 @@ export class McpStdioProxy implements ToolGateway {
         matchedPolicies: policyEval.matchedPolicies,
         status: "pending" as const,
         createdAt: Date.now(),
+        policyVersion: initialPolicyVersion,
+        expiresAt,
+        actionContextHash,
       };
 
       const requestedEv: ApprovalRequestedEvent = {
@@ -756,7 +902,23 @@ export class McpStdioProxy implements ToolGateway {
         };
       }
 
-      // POST-APPROVAL KILL SWITCH RE-CHECK (FINDING-05 Fix: Authoritative Concurrency Invariant)
+      // POST-APPROVAL COMPREHENSIVE SECURITY REVALIDATION
+      if (Date.now() > expiresAt) {
+        return {
+          jsonrpc: "2.0",
+          id: request.id,
+          result: {
+            isError: true,
+            content: [
+              {
+                type: "text",
+                text: "Execution blocked: Approval request expired prior to execution",
+              },
+            ],
+          },
+        };
+      }
+
       if (this.options.repository.isKillSwitchActive(this.options.sessionId)) {
         const raceBlockedEv: ActionBlockedEvent = {
           id: this.generateId("evt"),
@@ -808,6 +970,64 @@ export class McpStdioProxy implements ToolGateway {
           },
         };
       }
+
+      if (this.options.repository.isSourceQuarantined(sourceId)) {
+        return {
+          jsonrpc: "2.0",
+          id: request.id,
+          result: {
+            isError: true,
+            content: [
+              {
+                type: "text",
+                text: `Execution blocked: Source '${sourceId}' was quarantined prior to execution`,
+              },
+            ],
+          },
+        };
+      }
+
+      const currentPolicyVersion =
+        this.options.policyEngine.getVersion?.() ?? 1;
+      if (currentPolicyVersion !== initialPolicyVersion) {
+        return {
+          jsonrpc: "2.0",
+          id: request.id,
+          result: {
+            isError: true,
+            content: [
+              {
+                type: "text",
+                text: `Execution blocked: Policy version changed (v${initialPolicyVersion} -> v${currentPolicyVersion}) while approval was pending; action must be re-evaluated`,
+              },
+            ],
+          },
+        };
+      }
+
+      const recomputedHash = computeActionContextHash({
+        sessionId: this.options.sessionId,
+        actionKind: canonical.kind,
+        params: canonical.params,
+        source: sourceId,
+        policyVersion: currentPolicyVersion,
+        riskScore: risk.score,
+      });
+      if (recomputedHash !== actionContextHash) {
+        return {
+          jsonrpc: "2.0",
+          id: request.id,
+          result: {
+            isError: true,
+            content: [
+              {
+                type: "text",
+                text: "Security Violation: Action context hash mismatch between approval and execution",
+              },
+            ],
+          },
+        };
+      }
     }
 
     // 9. ALLOW or Approved -> Forward to Downstream Server
@@ -828,6 +1048,24 @@ export class McpStdioProxy implements ToolGateway {
 
     // Save correlation context for downstream response handling
     return new Promise<JsonRpcResponse>((resolve) => {
+      const timeoutMs = this.options.requestTimeoutMs || 30000;
+      let timeoutTimer: NodeJS.Timeout | undefined;
+      if (timeoutMs > 0) {
+        timeoutTimer = setTimeout(() => {
+          const pending = this.pendingClientRequests.get(request.id);
+          if (pending) {
+            this.pendingClientRequests.delete(request.id);
+            pending.resolve(
+              createJsonRpcError(
+                request.id,
+                -32000,
+                `Request timed out after ${timeoutMs}ms`,
+              ),
+            );
+          }
+        }, timeoutMs);
+      }
+
       this.pendingClientRequests.set(request.id, {
         request,
         resolve,
@@ -836,6 +1074,7 @@ export class McpStdioProxy implements ToolGateway {
         actionId,
         isOutsideWorkspace,
         isToolMutated,
+        timeoutTimer,
       });
 
       this.forwardToDownstream(request);
@@ -877,6 +1116,11 @@ export class McpStdioProxy implements ToolGateway {
     if (!pending) {
       this.sendToClient(response);
       return;
+    }
+
+    if (pending.timeoutTimer) {
+      clearTimeout(pending.timeoutTimer);
+      pending.timeoutTimer = undefined;
     }
 
     this.pendingClientRequests.delete(response.id!);
@@ -967,6 +1211,13 @@ export class McpStdioProxy implements ToolGateway {
           diffSummary: `Tool definition mutated at runtime (change count: ${res.changeCount})`,
         };
         this.options.eventSink.emit(changeEv).catch(() => {});
+        this.options.behavioralEngine?.recordToolMutation(
+          this.options.sessionId,
+          {
+            actionId: changeEv.id,
+            toolName: tool.name,
+          },
+        );
       }
     }
   }
@@ -998,6 +1249,17 @@ export class McpStdioProxy implements ToolGateway {
       isOutsideWorkspace: pending.isOutsideWorkspace,
       isToolMutated: pending.isToolMutated,
     });
+
+    if (inspection.secretLeakDetected) {
+      risk.level = "CRITICAL";
+      risk.score = Math.max(risk.score, 95);
+      risk.flags.push({
+        ruleId: "SECRET_LEAK_OUTPUT",
+        description: `Potential secret or credential leaked in tool output: ${inspection.secretType || "sensitive secret"}`,
+        severity: "CRITICAL",
+        scoreImpact: 95,
+      });
+    }
 
     const completedEv: ActionCompletedEvent = {
       id: this.generateId("evt"),
@@ -1129,6 +1391,65 @@ export class McpStdioProxy implements ToolGateway {
             {
               type: "text",
               text: "Execution blocked: Session was killed by operator kill switch",
+            },
+          ],
+        },
+      };
+    }
+
+    // 1b. Authoritative Source Quarantine Check
+    if (
+      this.options.repository.isSourceQuarantined(
+        actionSource.server ? `mcp:${actionSource.server}` : "default",
+      )
+    ) {
+      const qSourceId = actionSource.server
+        ? `mcp:${actionSource.server}`
+        : "default";
+      const blockedEvent: ActionBlockedEvent = {
+        id: this.generateId("evt"),
+        sequence: this.options.repository.getNextSequence(
+          this.options.sessionId,
+        ),
+        sessionId: this.options.sessionId,
+        agentId: this.options.agentId || "mcp-client",
+        timestamp: Date.now(),
+        type: "action.blocked",
+        actionId,
+        kind: canonical.kind,
+        category: canonical.category,
+        params: canonical.params,
+        reason: `Execution blocked: Source '${qSourceId}' is quarantined by security operator`,
+        risk: {
+          level: "CRITICAL",
+          score: 100,
+          flags: [
+            {
+              ruleId: "SOURCE_QUARANTINED",
+              description: `MCP source '${qSourceId}' is in quarantined state`,
+              severity: "CRITICAL",
+              scoreImpact: 100,
+            },
+          ],
+        },
+        policy: {
+          decision: "DENY",
+          matchedPolicies: ["source-quarantined"],
+          reason: `Source '${qSourceId}' is quarantined`,
+        },
+      };
+
+      await this.options.eventSink.emit(blockedEvent);
+
+      return {
+        jsonrpc: "2.0",
+        id: request.id,
+        result: {
+          isError: true,
+          content: [
+            {
+              type: "text",
+              text: `Execution blocked: MCP source '${qSourceId}' is quarantined by security operator`,
             },
           ],
         },
@@ -1310,6 +1631,19 @@ export class McpStdioProxy implements ToolGateway {
       }
 
       const approvalId = this.generateId("app");
+      const initialPolicyVersion =
+        this.options.policyEngine.getVersion?.() ?? 1;
+      const timeoutMs = this.options.policyEngine.getTimeoutMs?.() ?? 300000;
+      const expiresAt = Date.now() + timeoutMs;
+      const actionContextHash = computeActionContextHash({
+        sessionId: this.options.sessionId,
+        actionKind: canonical.kind,
+        params: canonical.params,
+        source: sourceId,
+        policyVersion: initialPolicyVersion,
+        riskScore: risk.score,
+      });
+
       const approvalReq = {
         id: approvalId,
         actionId,
@@ -1322,6 +1656,9 @@ export class McpStdioProxy implements ToolGateway {
         matchedPolicies: policyEval.matchedPolicies,
         status: "pending" as const,
         createdAt: Date.now(),
+        policyVersion: initialPolicyVersion,
+        expiresAt,
+        actionContextHash,
       };
 
       const requestedEv: ApprovalRequestedEvent = {
@@ -1401,7 +1738,23 @@ export class McpStdioProxy implements ToolGateway {
         };
       }
 
-      // POST-APPROVAL KILL SWITCH RE-CHECK (FINDING-05 Fix)
+      // POST-APPROVAL COMPREHENSIVE SECURITY REVALIDATION
+      if (Date.now() > expiresAt) {
+        return {
+          jsonrpc: "2.0",
+          id: request.id,
+          result: {
+            isError: true,
+            content: [
+              {
+                type: "text",
+                text: "Execution blocked: Approval request expired prior to execution",
+              },
+            ],
+          },
+        };
+      }
+
       if (this.options.repository.isKillSwitchActive(this.options.sessionId)) {
         const raceBlockedEv: ActionBlockedEvent = {
           id: this.generateId("evt"),
@@ -1453,6 +1806,64 @@ export class McpStdioProxy implements ToolGateway {
           },
         };
       }
+
+      if (this.options.repository.isSourceQuarantined(sourceId)) {
+        return {
+          jsonrpc: "2.0",
+          id: request.id,
+          result: {
+            isError: true,
+            content: [
+              {
+                type: "text",
+                text: `Execution blocked: Source '${sourceId}' was quarantined prior to execution`,
+              },
+            ],
+          },
+        };
+      }
+
+      const currentPolicyVersion =
+        this.options.policyEngine.getVersion?.() ?? 1;
+      if (currentPolicyVersion !== initialPolicyVersion) {
+        return {
+          jsonrpc: "2.0",
+          id: request.id,
+          result: {
+            isError: true,
+            content: [
+              {
+                type: "text",
+                text: `Execution blocked: Policy version changed (v${initialPolicyVersion} -> v${currentPolicyVersion}) while approval was pending; action must be re-evaluated`,
+              },
+            ],
+          },
+        };
+      }
+
+      const recomputedHash = computeActionContextHash({
+        sessionId: this.options.sessionId,
+        actionKind: canonical.kind,
+        params: canonical.params,
+        source: sourceId,
+        policyVersion: currentPolicyVersion,
+        riskScore: risk.score,
+      });
+      if (recomputedHash !== actionContextHash) {
+        return {
+          jsonrpc: "2.0",
+          id: request.id,
+          result: {
+            isError: true,
+            content: [
+              {
+                type: "text",
+                text: "Security Violation: Action context hash mismatch between approval and execution",
+              },
+            ],
+          },
+        };
+      }
     }
 
     // 9. ALLOW or Approved -> Forward to Downstream Server
@@ -1473,6 +1884,24 @@ export class McpStdioProxy implements ToolGateway {
 
     // Save correlation context for downstream response handling
     return new Promise<JsonRpcResponse>((resolve) => {
+      const timeoutMs = this.options.requestTimeoutMs || 30000;
+      let timeoutTimer: NodeJS.Timeout | undefined;
+      if (timeoutMs > 0) {
+        timeoutTimer = setTimeout(() => {
+          const pending = this.pendingClientRequests.get(request.id);
+          if (pending) {
+            this.pendingClientRequests.delete(request.id);
+            pending.resolve(
+              createJsonRpcError(
+                request.id,
+                -32000,
+                `Request timed out after ${timeoutMs}ms`,
+              ),
+            );
+          }
+        }, timeoutMs);
+      }
+
       this.pendingClientRequests.set(request.id, {
         request,
         resolve,
@@ -1480,6 +1909,7 @@ export class McpStdioProxy implements ToolGateway {
         normalizedAction: canonical,
         actionId,
         isOutsideWorkspace,
+        timeoutTimer,
       });
 
       this.forwardToDownstream(request);
@@ -1511,6 +1941,17 @@ export class McpStdioProxy implements ToolGateway {
     const risk = riskAnalyzer.analyze(canonical.kind, canonical.params, {
       isOutsideWorkspace: pending.isOutsideWorkspace,
     });
+
+    if (inspection.secretLeakDetected) {
+      risk.level = "CRITICAL";
+      risk.score = Math.max(risk.score, 95);
+      risk.flags.push({
+        ruleId: "SECRET_LEAK_OUTPUT",
+        description: `Potential secret or credential leaked in resource content: ${inspection.secretType || "sensitive secret"}`,
+        severity: "CRITICAL",
+        scoreImpact: 95,
+      });
+    }
 
     const completedEv: ActionCompletedEvent = {
       id: this.generateId("evt"),

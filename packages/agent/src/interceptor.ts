@@ -17,6 +17,8 @@ import {
   ApprovalRequest,
   TokenUsage,
   BehavioralEngine,
+  computeActionContextHash,
+  redactSecretsDeep,
 } from "@agent-monitor/core";
 import { ToolDefinition, ToolExecutionContext } from "./runtime.js";
 import { resolveSafeWorkspacePath } from "./tools/guardrails.js";
@@ -33,6 +35,7 @@ export interface InterceptorOptions {
   approvalManager?: ApprovalManager;
   behavioralEngine?: BehavioralEngine;
   isKillSwitchActive?: (sessionId: string) => boolean;
+  isQuarantined?: (sourceId: string) => boolean;
 }
 
 export class ActionInterceptor {
@@ -42,6 +45,7 @@ export class ActionInterceptor {
   private approvalManager?: ApprovalManager;
   private behavioralEngine?: BehavioralEngine;
   private isKillSwitchActive?: (sessionId: string) => boolean;
+  private isQuarantined?: (sourceId: string) => boolean;
   private sink: EventSink;
   private sessionSequences = new Map<string, number>();
 
@@ -66,6 +70,7 @@ export class ActionInterceptor {
       this.approvalManager = sinkOrOptions.approvalManager;
       this.behavioralEngine = sinkOrOptions.behavioralEngine;
       this.isKillSwitchActive = sinkOrOptions.isKillSwitchActive;
+      this.isQuarantined = sinkOrOptions.isQuarantined;
     } else {
       this.sink = sinkOrOptions;
       this.riskAnalyzer = riskAnalyzer;
@@ -188,6 +193,45 @@ export class ActionInterceptor {
       throw new Error("Action execution blocked by operator kill switch");
     }
 
+    // 0.05 Source Quarantine Check
+    if (
+      this.isQuarantined &&
+      (this.isQuarantined("native") || this.isQuarantined(ctx.agentId))
+    ) {
+      const blockedEvent: ActionBlockedEvent = {
+        id: this.generateId("evt"),
+        sequence: this.getNextSequence(ctx.sessionId),
+        sessionId: ctx.sessionId,
+        agentId: ctx.agentId,
+        timestamp: Date.now(),
+        type: "action.blocked",
+        actionId,
+        kind: tool.actionKind,
+        category: tool.category,
+        params: rawParams,
+        reason: "Execution blocked: Agent runtime or source is quarantined",
+        risk: {
+          level: "CRITICAL",
+          score: 100,
+          flags: [
+            {
+              ruleId: "SOURCE_QUARANTINED",
+              description: "Action attempted from quarantined source",
+              severity: "CRITICAL",
+              scoreImpact: 100,
+            },
+          ],
+        },
+        policy: {
+          decision: "DENY",
+          matchedPolicies: ["authoritative-source-quarantine"],
+          reason: "Source is quarantined",
+        },
+      };
+      await this.sink.emit(blockedEvent);
+      throw new Error("Action execution blocked: Source is quarantined");
+    }
+
     // 0.1 Behavioral Engine Evaluation
     let hasPriorSensitiveRead = false;
     let hasPriorWorkspaceWrite = false;
@@ -293,6 +337,17 @@ export class ActionInterceptor {
 
     if (policyEval.decision === "ASK") {
       const approvalId = this.generateId("app");
+      const initialPolicyVersion = this.policyEngine.getVersion();
+      const expiresAt = Date.now() + this.policyEngine.getTimeoutMs();
+      const actionContextHash = computeActionContextHash({
+        sessionId: ctx.sessionId,
+        actionKind: tool.actionKind,
+        params: rawParams,
+        source: "native",
+        policyVersion: initialPolicyVersion,
+        riskScore: risk.score,
+      });
+
       const approvalRequest: ApprovalRequest = {
         id: approvalId,
         actionId,
@@ -305,6 +360,9 @@ export class ActionInterceptor {
         matchedPolicies: policyEval.matchedPolicies,
         status: "pending",
         createdAt: Date.now(),
+        policyVersion: initialPolicyVersion,
+        expiresAt,
+        actionContextHash,
       };
 
       if (this.approvalManager) {
@@ -384,6 +442,34 @@ export class ActionInterceptor {
             : `Policy Error: Action '${tool.actionKind}' was denied by user`,
         );
       }
+
+      // Post-Approval Security Revalidation
+      if (Date.now() > expiresAt) {
+        throw new Error(
+          `Policy Error: Approval request expired for '${tool.actionKind}'`,
+        );
+      }
+
+      const currentPolicyVersion = this.policyEngine.getVersion();
+      if (currentPolicyVersion !== initialPolicyVersion) {
+        throw new Error(
+          `Policy Error: Policy version changed (from v${initialPolicyVersion} to v${currentPolicyVersion}) while approval was pending; action must be re-evaluated`,
+        );
+      }
+
+      const recomputedHash = computeActionContextHash({
+        sessionId: ctx.sessionId,
+        actionKind: tool.actionKind,
+        params: rawParams,
+        source: "native",
+        policyVersion: currentPolicyVersion,
+        riskScore: risk.score,
+      });
+      if (recomputedHash !== actionContextHash) {
+        throw new Error(
+          `Security Violation: Action context hash mismatch between approval and execution (possible substitution or parameter tampering)`,
+        );
+      }
     }
 
     // 5.1 Post-Approval / Pre-Execution Kill Switch Check
@@ -423,6 +509,15 @@ export class ActionInterceptor {
       throw new Error("Action execution blocked by operator kill switch");
     }
 
+    if (
+      this.isQuarantined &&
+      (this.isQuarantined("native") || this.isQuarantined(ctx.agentId))
+    ) {
+      throw new Error(
+        "Action execution blocked: Source was quarantined prior to execution",
+      );
+    }
+
     // 6. Action Execution (Only reached if ALLOW or Approved)
     const startedEvent: ActionStartedEvent = {
       id: this.generateId("evt"),
@@ -440,7 +535,22 @@ export class ActionInterceptor {
     await this.sink.emit(startedEvent);
 
     try {
-      const result = await tool.execute(rawParams, ctx);
+      const rawResult = await tool.execute(rawParams, ctx);
+      const redaction = redactSecretsDeep(rawResult);
+      const result = redaction.value;
+
+      if (redaction.hasSecrets) {
+        risk.flags.push({
+          ruleId: "SECRET_LEAK_REDACTED",
+          description: `Detected and redacted secrets in tool result: ${redaction.types.join(", ")}`,
+          severity: "CRITICAL",
+          scoreImpact: 30,
+        });
+        risk.score = Math.min(100, risk.score + 30);
+        if (risk.score >= 75) risk.level = "CRITICAL";
+        else if (risk.score >= 50) risk.level = "HIGH";
+      }
+
       const durationMs = Date.now() - startTime;
 
       const metadata: ActionCompletedEvent["metadata"] = {};
@@ -452,6 +562,11 @@ export class ActionInterceptor {
         metadata.exitCode = result.exitCode;
       } else if (tool.actionKind === "file.read" && result) {
         metadata.bytesProcessed = result.bytesRead;
+      }
+
+      if (redaction.hasSecrets) {
+        (metadata as any).secretLeakDetected = true;
+        (metadata as any).secretTypes = redaction.types;
       }
 
       const completedEvent: ActionCompletedEvent = {

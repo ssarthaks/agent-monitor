@@ -24,3 +24,19 @@ export interface RiskRule {
     context?: { isOutsideWorkspace?: boolean; isToolMutated?: boolean },
   ) => boolean;
 }
+
+export interface RiskContributor {
+  category: string;
+  description: string;
+  scoreImpact: number;
+  timestamp?: number;
+  eventId?: string;
+}
+
+export interface SessionRiskBreakdown {
+  sessionId: string;
+  score: number; // 0 to 100
+  severity: RiskLevel;
+  contributors: RiskContributor[];
+  evaluatedAt: number;
+}

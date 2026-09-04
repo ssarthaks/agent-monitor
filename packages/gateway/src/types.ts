@@ -61,6 +61,9 @@ export interface McpProxyOptions {
   clientOutputStream?: NodeJS.WritableStream;
   logStream?: NodeJS.WritableStream;
   serverName?: string;
+  requestTimeoutMs?: number; // default: 30000 ms
+  rateLimitPerMinute?: number; // default: 120 requests
+  maxRestarts?: number; // default: 3 restarts before auto-quarantine
 }
 
 export type McpMethodCategory =

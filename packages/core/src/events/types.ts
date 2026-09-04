@@ -17,7 +17,13 @@ export type EventType =
   | "tool.changed"
   | "behavioral.match"
   | "control.kill_switch_enabled"
-  | "control.kill_switch_disabled";
+  | "control.kill_switch_disabled"
+  | "incident.created"
+  | "incident.updated"
+  | "mcp.started"
+  | "mcp.crashed"
+  | "mcp.quarantined"
+  | "policy.changed";
 
 export interface BaseEvent {
   id: string; // Unique event ID (e.g. "evt_01J...")
@@ -26,6 +32,8 @@ export interface BaseEvent {
   agentId: string; // e.g. "deepseek-coding-agent"
   timestamp: number; // Unix epoch milliseconds
   type: EventType;
+  hash?: string; // SHA-256 cryptographic hash of canonical payload and prev_hash
+  prevHash?: string | null; // Hash of preceding event in monotonic sequence (null for sequence 1)
 }
 
 export interface SessionStartedEvent extends BaseEvent {
@@ -199,6 +207,53 @@ export interface KillSwitchDisabledEvent extends BaseEvent {
   resumedBy: string;
 }
 
+export interface IncidentCreatedEvent extends BaseEvent {
+  type: "incident.created";
+  incidentId: string;
+  incidentNumber: string;
+  severity: "CRITICAL" | "HIGH" | "MEDIUM" | "LOW";
+  triggerType: string;
+  title: string;
+}
+
+export interface IncidentUpdatedEvent extends BaseEvent {
+  type: "incident.updated";
+  incidentId: string;
+  status: string;
+  updatedBy?: string;
+  notes?: string;
+}
+
+export interface McpStartedEvent extends BaseEvent {
+  type: "mcp.started";
+  sourceId: string;
+  command: string;
+  pid?: number;
+}
+
+export interface McpCrashedEvent extends BaseEvent {
+  type: "mcp.crashed";
+  sourceId: string;
+  exitCode?: number | null;
+  signal?: string | null;
+  error?: string;
+}
+
+export interface McpQuarantinedEvent extends BaseEvent {
+  type: "mcp.quarantined";
+  sourceId: string;
+  reason: string;
+  quarantinedBy: string;
+}
+
+export interface PolicyChangedEvent extends BaseEvent {
+  type: "policy.changed";
+  action: "created" | "activated" | "rolled_back" | "rule_toggled";
+  versionId?: string;
+  ruleId?: string;
+  actor: string;
+}
+
 export type AgentEvent =
   | SessionStartedEvent
   | SessionEndedEvent
@@ -214,7 +269,13 @@ export type AgentEvent =
   | ToolChangedEvent
   | BehavioralMatchEvent
   | KillSwitchEnabledEvent
-  | KillSwitchDisabledEvent;
+  | KillSwitchDisabledEvent
+  | IncidentCreatedEvent
+  | IncidentUpdatedEvent
+  | McpStartedEvent
+  | McpCrashedEvent
+  | McpQuarantinedEvent
+  | PolicyChangedEvent;
 
 export interface AgentSession {
   id: string;

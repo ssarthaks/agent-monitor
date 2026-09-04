@@ -15,6 +15,22 @@ export function resolveSafeWorkspacePath(
 ): { safePath: string; isOutsideWorkspace: boolean; reason?: string } {
   const normalizedRoot = path.resolve(workspaceRoot);
 
+  if (!targetPath || typeof targetPath !== "string" || !targetPath.trim()) {
+    return {
+      safePath: normalizedRoot,
+      isOutsideWorkspace: true,
+      reason: "Target path is empty or invalid",
+    };
+  }
+
+  if (targetPath.includes("\0")) {
+    return {
+      safePath: "",
+      isOutsideWorkspace: true,
+      reason: `Target path contains null byte injection: '${targetPath}'`,
+    };
+  }
+
   // Iteratively decode URL encodings (e.g. %2e%2e%2f or nested %252e%252e%252f)
   let cleanPath = targetPath;
   try {
@@ -27,6 +43,32 @@ export function resolveSafeWorkspacePath(
     cleanPath = prev;
   } catch {}
 
+  cleanPath = cleanPath.normalize("NFC");
+
+  if (cleanPath.includes("\0")) {
+    return {
+      safePath: "",
+      isOutsideWorkspace: true,
+      reason: `Decoded path contains null byte injection: '${cleanPath}'`,
+    };
+  }
+
+  const isWindowsDriveOrUnc = (p: string) => {
+    if (/^[a-zA-Z]:[/\\]?/.test(p)) {
+      if (
+        !normalizedRoot
+          .toLowerCase()
+          .startsWith(p.substring(0, 2).toLowerCase())
+      ) {
+        return true;
+      }
+    }
+    if (/^(\\\\[^\\]+\\[^\\]+|\/\/[^/]+\/[^/]+)/.test(p)) {
+      return true;
+    }
+    return false;
+  };
+
   // Candidates to evaluate: raw, decoded, and backslash-normalized versions
   const candidates = new Set<string>([
     targetPath,
@@ -36,6 +78,14 @@ export function resolveSafeWorkspacePath(
   ]);
 
   for (const cand of candidates) {
+    if (isWindowsDriveOrUnc(cand)) {
+      return {
+        safePath: cand,
+        isOutsideWorkspace: true,
+        reason: `Path '${targetPath}' specifies a drive or network UNC share outside workspace root '${normalizedRoot}'`,
+      };
+    }
+
     const resolvedCand = path.isAbsolute(cand)
       ? path.resolve(cand)
       : path.resolve(normalizedRoot, cand);

@@ -16,6 +16,8 @@ import {
   Cpu,
 } from "lucide-react";
 
+export type DashboardTab = "timeline" | "incidents" | "mcp" | "policies";
+
 interface HeaderProps {
   session: AgentSession | null;
   isConnected: boolean;
@@ -25,6 +27,8 @@ interface HeaderProps {
   events?: AgentEvent[];
   onKill?: () => void;
   onResume?: () => void;
+  activeTab?: DashboardTab;
+  onSelectTab?: (tab: DashboardTab) => void;
 }
 
 export function Header({
@@ -36,6 +40,8 @@ export function Header({
   events = [],
   onKill,
   onResume,
+  activeTab = "timeline",
+  onSelectTab,
 }: HeaderProps) {
   const [copied, setCopied] = useState(false);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
@@ -204,6 +210,7 @@ export function Header({
                 </span>
                 <span className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded bg-alabaster-muted text-ink border border-alabaster-border">
                   V0.3
+                  V4.0.0
                 </span>
               </div>
             </div>
@@ -284,6 +291,28 @@ export function Header({
               )}
             </div>
           )}
+
+          {/* Navigation Tabs */}
+          <nav className="hidden lg:flex items-center gap-1 ml-2 bg-alabaster p-1 rounded border border-alabaster-border">
+            {[
+              { id: "timeline", label: "Timeline" },
+              { id: "incidents", label: "Incidents" },
+              { id: "mcp", label: "MCP Sources" },
+              { id: "policies", label: "Policies" },
+            ].map((tab) => (
+              <button
+                key={tab.id}
+                onClick={() => onSelectTab?.(tab.id as DashboardTab)}
+                className={`px-3 py-1 text-xs font-bold rounded transition-colors ${
+                  activeTab === tab.id
+                    ? "bg-ink text-white"
+                    : "text-ink-muted hover:text-ink hover:bg-alabaster-muted"
+                }`}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </nav>
         </div>
 
         {/* Right: Actions, Clock, Risk & Live Stream */}

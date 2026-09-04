@@ -1,6 +1,6 @@
-# Agent Monitor Architecture (V0.3 UNIVERSAL CONTROL BOUNDARY)
+# Agent Monitor Architecture (V4.1.0)
 
-Agent Monitor is architected as a **local-first, deterministic control plane and universal security boundary** for autonomous AI coding agents and Model Context Protocol (MCP) clients.
+Agent Monitor is architected as a **local-first, production control plane, universal security boundary, and security operations center** for autonomous AI coding agents and Model Context Protocol (MCP) clients.
 
 ---
 
@@ -23,47 +23,40 @@ Agent Monitor is architected as a **local-first, deterministic control plane and
 │   ActionInterceptor (@agent-monitor/agent) OR                          │
 │   McpStdioProxy     (@agent-monitor/gateway)                           │
 │                                                                        │
-│   1. Authoritative Pre-Kill Switch Circuit Breaker                     │
-│   2. RFC 8089 URI & Canonical Path Normalization                       │
-│   3. Workspace Boundary Guardrails & Symlink Escape Prevention         │
-│   4. Tool Schema Fingerprinting (SHA-256 Rug-Pull Detection)           │
-│   5. Behavioral Sequence Engine (Multi-Step Exfiltration Correlation)  │
-│   6. Deterministic Risk Scoring (0–100 CWE Heuristics)                 │
-│   7. Additive Policy Evaluation (ALLOW / DENY / ASK)                   │
-│   8. Human-in-the-Loop Approvals (Terminal & Web UI)                   │
-│   9. Post-Approval Kill Switch Verification                            │
-│  10. Deep Result Inspection & Sensitive Secret Redaction               │
+│   1. Authoritative Pre-Kill Switch Circuit Breaker (SQLite WAL)        │
+│   2. Sticky MCP Source Quarantine Check (SQLite-Backed)                │
+│   3. Sliding-Window Rate Limiter & Flood Prevention                    │
+│   4. Action Normalization & RFC 8089 URI Canonicalization              │
+│   5. Workspace Boundary Containment & Symlink Validation               │
+│   6. Tool Schema Fingerprinting (SHA-256 Rug-Pull Detection)           │
+│   7. Behavioral Sequence Engine V2 (Multi-Step Attack Correlation)     │
+│   8. Deterministic Risk Scoring (0–100 CWE Heuristics)                 │
+│   9. Versioned Additive Policy Evaluation (ALLOW / DENY / ASK)         │
+│  10. Human-in-the-Loop Approvals (Terminal & Web UI)                   │
+│  11. Post-Approval Comprehensive Revalidation                          │
+│      - Action Context Hash Match                                       │
+│      - Approval Expiration Verification                                │
+│      - Active Policy Version Match                                     │
+│      - Secondary Kill Switch & Quarantine Check                        │
+│  12. Downstream Execution with Bounded Timeouts (30s default)          │
+│  13. Deep Result Inspection & Secret Redaction (500KB cap)             │
 └───────────────────────────────────┬────────────────────────────────────┘
-                                    │ Authoritative Events
+                                    │ Authoritative Chained Events
                                     ▼
 ┌────────────────────────────────────────────────────────────────────────┐
 │                             MONITOR SERVER                             │
 │                                                                        │
 │   ┌────────────────────────┐         ┌─────────────────────────────┐   │
 │   │  SQLite WAL Database   │ ◄─────► │    In-Memory EventBus       │   │
-│   │  (sessions, events,    │         │   (Per-session pub/sub)     │   │
-│   │   approvals, tools,    │         │                             │   │
-│   │   behavioral_matches)  │         │                             │   │
-│   └────────────────────────┘         └──────────────┬──────────────┘   │
-│                                                     │ SSE Stream       │
-│                                                     ▼                  │
-│   ┌────────────────────────────────────────────────────────────────┐   │
-│   │       HTTP REST API & Embedded Static DevTools Web UI          │   │
-│   │       - GET  /health           - GET  /events/stream           │   │
-│   │       - GET  /policy           - POST /approvals/:id/approve   │   │
-│   │       - POST /sessions/:id/kill- POST /approvals/:id/deny      │   │
-│   │       - GET  /sessions/:id/tools - GET /sessions/:id/control   │   │
-│   └────────────────────────────────┬───────────────────────────────┘   │
-└────────────────────────────────────┼───────────────────────────────────┘
-                                     │
-                                     ▼
-┌────────────────────────────────────────────────────────────────────────┐
-│                      CLIENT CONTROL INTERFACES                         │
-│                                                                        │
-│   ┌─────────────────────────────┐    ┌─────────────────────────────┐   │
-│   │   CLI Terminal Live Stream  │    │ Next.js 15 Web Dashboard    │   │
-│   │   (readline prompt & logs)  │    │ (http://localhost:4040)     │   │
-│   └─────────────────────────────┘    └─────────────────────────────┘   │
+│   │  - sessions            │         │   (Per-session pub/sub)     │   │
+│   │  - events (hash chain) │         │                             │   │
+│   │  - approvals           │         └──────────────┬──────────────┘   │
+│   │  - tool_fingerprints   │                        │ SSE Stream       │
+│   │  - behavioral_matches  │                        ▼                  │
+│   │  - policy_versions     │         ┌─────────────────────────────┐   │
+│   │  - incidents           │         │ Web DevTools Dashboard      │   │
+│   │  - mcp_sources         │         │ (http://localhost:4040)     │   │
+│   └────────────────────────┘         └─────────────────────────────┘   │
 └────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -72,26 +65,29 @@ Agent Monitor is architected as a **local-first, deterministic control plane and
 ## Core Components & Package Boundaries
 
 ### 1. `@agent-monitor/core`
-
 - **Zero external dependencies**, pure domain logic.
-- **Domain Types**: `ActionKind`, `ActionCategory`, `AgentEvent`, `AgentSession`, `ApprovalRequest`, `ExternalToolDefinition`.
+- **Domain Types**: `ActionKind`, `ActionCategory`, `AgentEvent`, `AgentSession`, `ApprovalRequest`, `ExternalToolDefinition`, `SecurityIncident`, `McpSource`.
 - **Normalization Engine**: `ActionNormalizer` maps raw MCP calls, process commands, and resource URIs into strongly typed canonical actions.
 - **Deterministic Risk Engine**: `RiskAnalyzer` evaluates parameters against CWE security rules with RFC 8089 URI normalization and path containment flags.
 - **Deterministic Policy Engine**: `PolicyEngine` evaluates additive specificity across Action, Path, Command, Context, and Sequence dimensions.
-- **Behavioral Sequence Engine**: `BehavioralEngine` correlates temporal multi-step security flows (e.g. `SEC_SENSITIVE_TO_NETWORK`) with bounded memory sliding windows.
-- **Tool Fingerprinting**: `computeToolFingerprint` generates cryptographic SHA-256 signatures of tool definitions to detect runtime mutation (rug-pull) attacks.
+- **Centralized Policy Versioning**: `PolicyEngine`, `diffPolicyVersions`, `rollbackPolicyVersion`, and SHA-256 content hash computation.
+- **Behavioral Sequence Engine V2**: `BehavioralEngine` correlates temporal multi-step attack sequences (`SEC_MUTATION_TO_READ`, `SEC_TRAVERSAL_TO_EXEC`, `SEC_DENIAL_TO_ALTERNATIVE`, `SEC_SENSITIVE_TO_NETWORK`) with bounded sliding memory windows.
+- **Tool Fingerprinting**: `computeToolFingerprint` and `computeToolSchemaFingerprint` generate cryptographic SHA-256 signatures of tool definitions to detect runtime mutation (rug-pull) attacks.
+- **Cryptographic Audit Integrity**: `computeEventHash`, `verifyEventChain`, `canonicalizeJson`, and `exportCanonicalLedger` implement append-only SHA-256 hash chaining across historical events.
+- **Deep Secret Redactor**: `redactSecretsDeep` scans objects for API keys, AWS credentials, JWT tokens, and private keys, replacing them with `[REDACTED:<type>]`.
 
 ### 2. `@agent-monitor/server`
-
-- **Local SQLite WAL Database**: `SessionRepository` stores `sessions`, `events`, `approvals`, `tool_fingerprints`, and `behavioral_matches` tables.
+- **Local SQLite WAL Database**: `SessionRepository` manages authoritative persistence with `busy_timeout = 5000` and `synchronous = NORMAL`.
+- **Database Migrations**: Transactional migrations (`001` through `007`) handling schema evolution, performance indexes, policy versions, incidents, MCP sources, and hash chaining.
 - **Authoritative Kill Switch**: Instant circuit breaker state machine (`isKillSwitchActive`, `setKillSwitch`) persisted in SQLite.
+- **Sticky MCP Quarantine**: Isolates untrusted sources across process restarts until an operator explicitly trusts them.
+- **Incident Lifecycle Management**: Auto-creates security incident records for critical violations with status transitions and correlated events.
 - **Atomic Approval Resolution**: `UPDATE approvals SET status = ?, resolved_by = ?, resolved_at = ? WHERE id = ? AND status = 'pending'`. Only `changes === 1` succeeds, eliminating race conditions.
 - **EventBus & SSE**: Delivers real-time server-sent events to connected dashboard tabs and terminal loggers.
 - **Static Web Hosting & Security**: Embeds the compiled Next.js DevTools dashboard with strict local-origin CORS validation.
 
 ### 3. `@agent-monitor/agent`
-
-- **Guardrails**: `resolveSafeWorkspacePath` validates path containment with iterative URL decoding, POSIX and Windows backslash normalization, and symlink escape checks.
+- **Guardrails**: `resolveSafeWorkspacePath` validates path containment with iterative URL decoding, POSIX and Windows backslash normalization, null-byte injection detection, UNC network share blocking, and symlink escape checks.
 - **Safe Tool Implementations**: `readFileTool`, `writeFileTool`, `listFilesTool`, `runCommandTool`.
 - **Process Isolation**: `runCommandTool` strips sensitive environment credentials (`process.env`) before child process spawning.
 - **ActionInterceptor**: Enforces authoritative pre- and post-approval Kill Switch checks, risk analysis, policy evaluation, and event sequencing.
@@ -99,57 +95,72 @@ Agent Monitor is architected as a **local-first, deterministic control plane and
 - **Reference Agent**: `DeepSeekCodingAgent` provides an autonomous prompt loop powered by DeepSeek API.
 
 ### 4. `@agent-monitor/gateway`
-
 - **Universal MCP Stdio Gateway**: Transparent JSON-RPC 2.0 proxy wrapping any downstream MCP server.
 - **Protocol Interception**: Enforces full security invariant for `tools/call` and `resources/read`. Discovers and registers tool baselines on `tools/list`.
 - **RFC 8089 Fail-Closed URI Containment**: Leverages standard `fileURLToPath` and fails closed on invalid remote or UNC hosts.
-- **Result Inspector**: `McpResultInspector` redacts private keys and truncates excessive tool outputs.
+- **Payload Size Bounding**: Rejects tool call arguments exceeding 1MB with JSON-RPC error -32602.
+- **Sticky Source Quarantine**: Blocks all calls from quarantined sources fail-closed before any processing.
+- **Sliding-Window Rate Limiting**: Enforces configurable requests-per-minute thresholds to prevent command flooding.
+- **Execution Timeouts**: Attaches bounded timeouts (default 30s) to downstream requests with guaranteed cleanup on completion, error, or process exit.
+- **Result Inspector**: `McpResultInspector` detects and redacts leaked credentials and truncates responses exceeding 500KB.
 
 ### 5. `@agent-monitor/cli`
-
 - Binary entrypoint (`agent-monitor`).
-- Commands: `run`, `server`, `policy check`, `mcp proxy`, `kill`, `resume`, `tools`, `security flows`, `config init`, `config validate`, `sessions`, `status`.
+- Commands for agent orchestration, policy simulation, version rollbacks, incident triage, MCP quarantine, cryptographic audit verification, and health diagnostics.
+- Supports `--json` machine-readable output across all operational commands.
 
 ### 6. `@agent-monitor/web`
-
-- Next.js 15 App Router interface styled in **Alabaster, Ink, and Burnt Terra Cotta**.
-- Features: Real-time action stream, unified diffs, terminal outputs, tool integrity matrix, behavioral sequences, and interactive approval modal.
+- Next.js 15 App Router interface.
+- Dedicated views for **Timeline**, **Incidents**, **MCP Sources**, and **Policies**.
 
 ---
 
-## Event Lifecycle & Strict Ordering
-
-Agent Monitor guarantees strict event emission ordering:
+## Non-Negotiable 13-Stage Security Invariant
 
 ```text
-ALLOW Path:
-  policy.evaluated → action.started → tool.execute() → action.completed
-
-DENY Path:
-  policy.evaluated → action.blocked
-  (Tool execution count = 0, action.started is never emitted)
-
-ASK + Approved Path:
-  policy.evaluated → approval.requested → approval.resolved(approved) → post-approval kill check → action.started → tool.execute() → action.completed
-
-ASK + Denied Path:
-  policy.evaluated → approval.requested → approval.resolved(denied) → action.blocked
-  (Tool execution count = 0, action.started is never emitted)
-
-ASK + Expired Path:
-  policy.evaluated → approval.requested → approval.resolved(expired) → action.blocked
-  (Tool execution count = 0, action.started is never emitted)
-
-KILL SWITCH Active Path:
-  action.blocked: Operator Kill Switch
-  (Evaluation halts immediately; downstream tool is never reached)
+REQUEST
+  ↓
+1. KILL SWITCH (Authoritative SQLite WAL Check)
+  ↓
+2. SOURCE QUARANTINE (Sticky Isolation)
+  ↓
+3. RATE LIMITING (Sliding Window)
+  ↓
+4. ACTION NORMALIZATION (RFC 8089 URI Canonicalization)
+  ↓
+5. WORKSPACE GUARDRAILS (Path Traversal & Symlink Escapes)
+  ↓
+6. RISK ASSESSMENT & SCHEMA MUTATION CHECK (CWE Scored Analysis)
+  ↓
+7. DETERMINISTIC POLICY EVALUATION (Additive Specificity)
+  ↓
+8. HUMAN APPROVAL IF ASK (Terminal / Web UI)
+  ↓
+9. POST-APPROVAL COMPREHENSIVE REVALIDATION
+   - Hash Context Match (No Parameter Tampering)
+   - Expiration Check
+   - Active Policy Version Match
+   - Kill Switch Re-Verification
+  ↓
+10. DOWNSTREAM EXECUTION (with Bounded Timeouts & Idempotency)
+  ↓
+11. RESULT INSPECTION & SECRET REDACTION (500KB Bound)
+  ↓
+12. SQLITE PERSISTENCE WITH SHA-256 HASH CHAINING
+  ↓
+13. AUTOMATIC INCIDENT CREATION & CLIENT DISPATCH
 ```
 
 ---
 
-## Source of Truth & Local-First Invariants
+## Database Migrations
 
-1. **SQLite is the Single Authoritative Source of Truth**: All actions, approvals, tool fingerprints, and control states are committed to SQLite before being dispatched to SSE subscribers or external listeners.
-2. **Deterministic & Synchronous Policies**: The Policy Engine contains zero LLM inference or probabilistic scoring. Evaluation is 100% deterministic, synchronous, and rule-based.
-3. **Fail-Closed Security**: Any malformed payload, invalid URI, ambiguous path, or active kill switch fails closed immediately.
-4. **Provider Independence**: `@agent-monitor/core`, `@agent-monitor/server`, and `@agent-monitor/gateway` have zero awareness of DeepSeek or any specific LLM provider.
+| Migration | Name | Description |
+| :--- | :--- | :--- |
+| `001_initial_schema` | Initial Core Schema | Base tables: `sessions`, `events`, `approvals`, `tool_fingerprints`, `behavioral_matches`. |
+| `002_performance_indexes` | Performance Indexes | High-speed lookup indexes on `(session_id, sequence)`, `(status)`, and timestamps. |
+| `003_policy_versions` | Policy Versioning | Tables `policy_versions` and `policy_history` for immutable versioning and rollback. |
+| `004_incidents` | Incident Case Model | Tables `incidents` and `incident_events` for security incident tracking. |
+| `005_mcp_sources` | MCP Source Registry | Table `mcp_sources` for tracking server health and sticky quarantine status. |
+| `006_audit_hash_chain` | Cryptographic Hash Chaining | Adds `hash` and `prev_hash` columns and indexes to `events` table for tamper detection. |
+| `007_v41_production_hardening` | Production Hardening | Adds `policy_version`, `expires_at`, and `action_context_hash` to approvals; adds transport and schema fingerprints to MCP sources. |

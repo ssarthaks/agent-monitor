@@ -1,0 +1,13 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "@agent-monitor/core": ["./packages/core/src/index.ts"],
+      "@agent-monitor/server": ["./packages/server/src/index.ts"],
+      "@agent-monitor/agent": ["./packages/agent/src/index.ts"],
+      "@agent-monitor/gateway": ["./packages/gateway/src/index.ts"],
+      "@agent-monitor/cli": ["./packages/cli/src/index.ts"]
+    }
+  }
+}

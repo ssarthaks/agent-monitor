@@ -15,9 +15,15 @@ It is designed with an **Alabaster, Ink, and Burnt Terra Cotta** color palette a
 ## Key Components
 
 - **`useSessionStream`**: React hook managing SSE connection, automatic reconnection, missed event recovery via `Last-Event-ID` / `afterSeq`, and REST approvals dispatch.
+- **`Header`**: Navigation bar with session selector and tabs (`Timeline`, `Incidents`, `MCP Sources`, `Policies`).
+- **`Timeline`**: Interactive activity stream with status icons and category filters (`ALL`, `FILES`, `COMMANDS`, `ERRORS`, `HIGH RISK`).
+- **`IncidentsView`**: Security operations center for browsing, filtering, triaging, and inspecting correlated events for incidents.
+- **`McpSourcesView`**: Registered MCP server health diagnostics and one-click sticky Quarantine / Trust actions.
+- **`PoliciesView`**: Policy version list, rule enable/disable toggles, and one-click rollback activation.
 - **`ApprovalModal`**: Modal popup for reviewing and approving/denying `ASK` actions.
 - **`Timeline`**: Interactive activity stream with status icons and category filters (`ALL`, `FILES`, `COMMANDS`, `ERRORS`, `HIGH RISK`).
 - **`ActionDetail`**: Renders unified file diffs, execution output, and action parameters.
+
 
 ---
 

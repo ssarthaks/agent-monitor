@@ -17,12 +17,15 @@ $$\text{REQUEST} \longrightarrow \text{KILL SWITCH} \longrightarrow \text{NORMAL
 ## Key Features
 
 - **Universal Stdio Interception**: Intercepts JSON-RPC 2.0 frames over `stdin`/`stdout` without requiring modifications to agent or server code.
+- **Sticky Source Quarantine & Trust**: Blocks calls from quarantined MCP sources fail-closed; quarantine status persists across process restarts until manually trusted.
+- **Sliding-Window Rate Limiting**: Enforces requests-per-minute bounds to protect downstream systems from prompt loops.
+- **Bounded Downstream Execution Timeouts**: Terminates hanging requests with 30s defaults and timer resource cleanup.
 - **Strict RFC 8089 URI & Path Normalization**: Resolves `file://localhost/...`, UNC network shares, and custom URIs with fail-closed security.
 - **Tool Fingerprinting & Rug-Pull Detection**: Computes cryptographic SHA-256 signatures of tool definitions discovered via `tools/list`. Flags runtime mutations and schema alterations before execution.
 - **Authoritative Pre- & Post-Execution Kill Switch**: Checks SQLite-backed circuit breaker state before and immediately after human approval to eliminate race conditions.
 - **Human-in-the-Loop Approvals**: Prompts operators via terminal or web dashboard when policies evaluate to `ASK`.
-- **Deep Result Inspection**: Inspects tool and resource responses for sensitive leaks (PEM private keys, credentials) and bounds payload output sizes.
-- **Behavioral Sequence Integration**: Correlates multi-step sequences across sessions (e.g. sensitive file reads followed by network requests or command executions).
+- **Deep Result & Secret Inspection**: Catches leaked API keys, AWS credentials, JWT tokens, and private SSH/TLS keys before returning to the agent.
+- **Behavioral Sequence Integration V2**: Correlates multi-step sequences across sessions (`SEC_MUTATION_TO_READ`, `SEC_TRAVERSAL_TO_EXEC`, `SEC_DENIAL_TO_ALTERNATIVE`, `SEC_SENSITIVE_TO_NETWORK`).
 
 ---
 
@@ -37,18 +40,21 @@ $$\text{REQUEST} \longrightarrow \text{KILL SWITCH} \longrightarrow \text{NORMAL
 ┌─────────────────────────────────────────────────────────────┐
 │                   McpStdioProxy (Gateway)                   │
 │                                                             │
-│  1. Authoritative Pre-Kill Switch Check                    │
-│  2. Action Normalization & Canonical Classification         │
-│  3. RFC 8089 & Workspace Guardrail Validation               │
-│  4. Deterministic Risk Scoring (0–100)                      │
-│  5. Policy Evaluation (ALLOW / DENY / ASK)                  │
-│  6. Human-in-the-Loop Approval Workflow                     │
-│  7. Post-Approval Kill Switch Verification                  │
-│  8. Tool Schema Mutation Check (Rug-Pull Detection)         │
-│  9. Downstream Execution                                    │
-│ 10. McpResultInspector (Secret Redaction & Truncation)      │
-│ 11. Monotonic Event Sequencing to SQLite Persistence        │
+│  1. Authoritative Pre-Kill Switch Check                     │
+│  2. Sticky MCP Source Quarantine Check                      │
+│  3. Sliding-Window Rate Limiter Check                       │
+│  4. Action Normalization & Canonical Classification         │
+│  5. RFC 8089 & Workspace Guardrail Validation               │
+│  6. Deterministic Risk Scoring (0–100)                      │
+│  7. Policy Evaluation (ALLOW / DENY / ASK)                  │
+│  8. Human-in-the-Loop Approval Workflow                     │
+│  9. Post-Approval Kill Switch Verification                  │
+│ 10. Tool Schema Mutation Check (Rug-Pull Detection)         │
+│ 11. Downstream Execution with Bounded Timeouts              │
+│ 12. McpResultInspector (Secret Leak Redaction & 500KB Cap)  │
+│ 13. Monotonic Event Sequencing to Chained SQLite Audit Log  │
 └────────┬────────────────────────────────────────────────────┘
+
          │ JSON-RPC (stdio)
          ▼
 ┌─────────────────┐

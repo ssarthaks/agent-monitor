@@ -69,6 +69,9 @@ export class PolicyEngine {
     }> = [];
 
     for (const item of this.rules) {
+      if (item.rule.enabled === false) {
+        continue;
+      }
       if (matchesRule(item.rule, action, context)) {
         matching.push(item);
       }
@@ -119,12 +122,54 @@ export class PolicyEngine {
     return this.rules.map((r) => r.rule);
   }
 
+  getRule(ruleId: string): PolicyRule | undefined {
+    return this.rules.find((r) => r.rule.id === ruleId)?.rule;
+  }
+
+  enableRule(ruleId: string): boolean {
+    const item = this.rules.find((r) => r.rule.id === ruleId);
+    if (!item) return false;
+    item.rule.enabled = true;
+    return true;
+  }
+
+  disableRule(ruleId: string): boolean {
+    const item = this.rules.find((r) => r.rule.id === ruleId);
+    if (!item) return false;
+    item.rule.enabled = false;
+    return true;
+  }
+
+  setRules(rules: PolicyRule[]): void {
+    this.rules = rules.map((rule, order) => ({
+      rule,
+      specificity: calculateRuleSpecificity(rule),
+      order,
+    }));
+  }
+
+  setDefaultDecision(decision: PolicyDecision): void {
+    this.defaultDecision = decision;
+  }
+
+  setTimeoutMs(timeoutMs: number): void {
+    this.timeoutMs = timeoutMs;
+  }
+
   getTimeoutMs(): number {
     return this.timeoutMs;
   }
 
   getDefaultDecision(): PolicyDecision {
     return this.defaultDecision;
+  }
+
+  getVersion(): number {
+    return this.version;
+  }
+
+  setVersion(version: number): void {
+    this.version = version;
   }
 
   /**

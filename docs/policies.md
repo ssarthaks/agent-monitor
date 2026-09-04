@@ -173,3 +173,55 @@ Output:
   Matched Rules:  protect-prod-config
   Reason:         Modifications to production configuration require human review.
 ```
+
+---
+
+## 6. Centralized Policy Versioning & Rollback (V4.0.0)
+
+In V4.0.0, security policies are centrally managed and versioned in SQLite. Each policy set is assigned:
+- A monotonically increasing `version_number` (e.g. `1`, `2`, `3`).
+- A cryptographic **SHA-256 content hash** guaranteeing rule immutability.
+- Audit tracking (`created_by`, `created_at`, `name`, `description`).
+
+### Inspecting Policy Versions
+
+```bash
+agent-monitor policy versions
+```
+
+### Computing Visual / Semantic Diffs
+
+Compare two policy versions to review added, removed, or modified rules:
+
+```bash
+agent-monitor policy diff 1 2
+```
+
+### Instant Rollback
+
+Revert to any historical policy configuration without deploying code or restarting the server:
+
+```bash
+agent-monitor policy rollback 1
+```
+
+### Dynamic Rule Toggling
+
+Enable or disable specific policy rules by ID without modifying files. Each toggle atomically creates a new version:
+
+```bash
+# Disable noisy rule in active policy
+agent-monitor policy disable ask-npm-install
+
+# Re-enable rule
+agent-monitor policy enable ask-npm-install
+```
+
+### Mutation Audit Trail
+
+Audit all policy activations, toggles, and rollbacks:
+
+```bash
+agent-monitor policy history
+```
+

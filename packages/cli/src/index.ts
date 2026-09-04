@@ -13,15 +13,41 @@ import { runMcpProxyCommand } from "./commands/mcp.js";
 import { runKillCommand, runResumeCommand } from "./commands/kill.js";
 import { runToolsCommand } from "./commands/tools.js";
 import { runSecurityFlowsCommand } from "./commands/security.js";
+import {
+  runPolicyVersionsCommand,
+  runPolicyRollbackCommand,
+  runPolicyToggleRuleCommand,
+  runPolicyDiffCommand,
+  runPolicyHistoryCommand,
+  runPolicyValidateCommand,
+} from "./commands/policy-v4.js";
+import {
+  runIncidentsListCommand,
+  runIncidentShowCommand,
+  runIncidentUpdateCommand,
+  runIncidentEventsCommand,
+} from "./commands/incidents.js";
+import {
+  runMcpListSourcesCommand,
+  runMcpShowSourceCommand,
+  runMcpQuarantineCommand,
+  runMcpTrustCommand,
+} from "./commands/mcp-sources.js";
+import {
+  runAuditVerifyCommand,
+  runAuditExportCommand,
+} from "./commands/audit.js";
+import { runEventsCommand } from "./commands/events.js";
+import { runHealthCommand } from "./commands/health.js";
 
 const program = new Command();
 
 program
   .name("agent-monitor")
   .description(
-    "Agent Monitor — Activity Monitor & Deterministic Policy Gate for AI Agents (V0.3 UNIVERSAL CONTROL BOUNDARY)",
+    "Agent Monitor — Production Control Plane & Security Operations for AI Agents (V4.0.0)",
   )
-  .version("0.3.0");
+  .version("4.0.0");
 
 // 1. Run Agent Task with Policy Monitoring
 program
@@ -140,6 +166,111 @@ policyCmd
     }
   });
 
+policyCmd
+  .command("versions")
+  .description("List all recorded policy versions and show active version")
+  .option("-w, --workspace <path>", "Workspace root path", process.cwd())
+  .option("--db <path>", "Custom SQLite database file path")
+  .option("--json", "Output pure machine-readable JSON format")
+  .action(async (options) => {
+    try {
+      await runPolicyVersionsCommand(options);
+    } catch (err: any) {
+      console.error(`\n❌ Error: ${err.message}`);
+      process.exit(1);
+    }
+  });
+
+policyCmd
+  .command("rollback <versionId>")
+  .description("Rollback active security policy to a historical version")
+  .option("-w, --workspace <path>", "Workspace root path", process.cwd())
+  .option("--db <path>", "Custom SQLite database file path")
+  .option("--json", "Output pure machine-readable JSON format")
+  .action(async (versionId, options) => {
+    try {
+      await runPolicyRollbackCommand(versionId, options);
+    } catch (err: any) {
+      console.error(`\n❌ Error: ${err.message}`);
+      process.exit(1);
+    }
+  });
+
+policyCmd
+  .command("enable <ruleId>")
+  .description("Enable a policy rule by ID")
+  .option("-w, --workspace <path>", "Workspace root path", process.cwd())
+  .option("--db <path>", "Custom SQLite database file path")
+  .option("--json", "Output pure machine-readable JSON format")
+  .action(async (ruleId, options) => {
+    try {
+      await runPolicyToggleRuleCommand(ruleId, true, options);
+    } catch (err: any) {
+      console.error(`\n❌ Error: ${err.message}`);
+      process.exit(1);
+    }
+  });
+
+policyCmd
+  .command("disable <ruleId>")
+  .description("Disable a policy rule by ID without deleting it")
+  .option("-w, --workspace <path>", "Workspace root path", process.cwd())
+  .option("--db <path>", "Custom SQLite database file path")
+  .option("--json", "Output pure machine-readable JSON format")
+  .action(async (ruleId, options) => {
+    try {
+      await runPolicyToggleRuleCommand(ruleId, false, options);
+    } catch (err: any) {
+      console.error(`\n❌ Error: ${err.message}`);
+      process.exit(1);
+    }
+  });
+
+policyCmd
+  .command("diff <versionA> <versionB>")
+  .description("Compute visual or JSON diff between two policy versions")
+  .option("-w, --workspace <path>", "Workspace root path", process.cwd())
+  .option("--db <path>", "Custom SQLite database file path")
+  .option("--json", "Output pure machine-readable JSON format")
+  .action(async (versionA, versionB, options) => {
+    try {
+      await runPolicyDiffCommand(versionA, versionB, options);
+    } catch (err: any) {
+      console.error(`\n❌ Error: ${err.message}`);
+      process.exit(1);
+    }
+  });
+
+policyCmd
+  .command("history")
+  .description("Show policy audit and mutation history log")
+  .option("-w, --workspace <path>", "Workspace root path", process.cwd())
+  .option("--db <path>", "Custom SQLite database file path")
+  .option("--json", "Output pure machine-readable JSON format")
+  .action(async (options) => {
+    try {
+      await runPolicyHistoryCommand(options);
+    } catch (err: any) {
+      console.error(`\n❌ Error: ${err.message}`);
+      process.exit(1);
+    }
+  });
+
+policyCmd
+  .command("validate <file>")
+  .description(
+    "Validate policy rules against safety schema, rule bounds, and consistency",
+  )
+  .option("--json", "Output pure machine-readable JSON format")
+  .action(async (file, options) => {
+    try {
+      await runPolicyValidateCommand(file, options);
+    } catch (err: any) {
+      console.error(`\n❌ Error: ${err.message}`);
+      process.exit(1);
+    }
+  });
+
 // Direct alias: `agent-monitor check ...`
 program
   .command("check")
@@ -229,9 +360,34 @@ program
     4040,
   )
   .option("--db <path>", "Custom SQLite database file path")
+  .option("--json", "Output pure machine-readable JSON format")
   .action(async (options) => {
     try {
       await runStatusCommand(options);
+    } catch (err: any) {
+      console.error(`\n❌ Error: ${err.message}`);
+      process.exit(1);
+    }
+  });
+
+// 6b. Health Diagnostics Command (`agent-monitor health`)
+program
+  .command("health")
+  .description(
+    "Run comprehensive system, database integrity, and server health diagnostics",
+  )
+  .option("-w, --workspace <path>", "Workspace directory", process.cwd())
+  .option(
+    "-p, --port <port>",
+    "Monitor Server port to probe",
+    (val) => parseInt(val, 10),
+    4040,
+  )
+  .option("--db <path>", "Custom SQLite database file path")
+  .option("--json", "Output pure machine-readable JSON format")
+  .action(async (options) => {
+    try {
+      await runHealthCommand(options);
     } catch (err: any) {
       console.error(`\n❌ Error: ${err.message}`);
       process.exit(1);
@@ -286,6 +442,72 @@ mcpCmd
       });
     } catch (err: any) {
       process.stderr.write(`\n❌ MCP Proxy Error: ${err.message}\n`);
+      process.exit(1);
+    }
+  });
+
+mcpCmd
+  .command("list")
+  .description(
+    "List registered downstream MCP server sources and health status",
+  )
+  .option("-w, --workspace <path>", "Workspace directory", process.cwd())
+  .option("--db <path>", "Custom SQLite database file path")
+  .option("--json", "Output pure machine-readable JSON format")
+  .action(async (options) => {
+    try {
+      await runMcpListSourcesCommand(options);
+    } catch (err: any) {
+      console.error(`\n❌ Error: ${err.message}`);
+      process.exit(1);
+    }
+  });
+
+mcpCmd
+  .command("show <sourceId>")
+  .description("Show detailed runtime and quarantine status for an MCP source")
+  .option("-w, --workspace <path>", "Workspace directory", process.cwd())
+  .option("--db <path>", "Custom SQLite database file path")
+  .option("--json", "Output pure machine-readable JSON format")
+  .action(async (sourceId, options) => {
+    try {
+      await runMcpShowSourceCommand(sourceId, options);
+    } catch (err: any) {
+      console.error(`\n❌ Error: ${err.message}`);
+      process.exit(1);
+    }
+  });
+
+mcpCmd
+  .command("quarantine <sourceId>")
+  .description("Quarantine an untrusted or compromised MCP source immediately")
+  .requiredOption(
+    "-r, --reason <reason>",
+    "Reason for quarantining this MCP source",
+  )
+  .option("-w, --workspace <path>", "Workspace directory", process.cwd())
+  .option("--db <path>", "Custom SQLite database file path")
+  .option("--json", "Output pure machine-readable JSON format")
+  .action(async (sourceId, options) => {
+    try {
+      await runMcpQuarantineCommand(sourceId, options.reason, options);
+    } catch (err: any) {
+      console.error(`\n❌ Error: ${err.message}`);
+      process.exit(1);
+    }
+  });
+
+mcpCmd
+  .command("trust <sourceId>")
+  .description("Trust and lift quarantine on an MCP source")
+  .option("-w, --workspace <path>", "Workspace directory", process.cwd())
+  .option("--db <path>", "Custom SQLite database file path")
+  .option("--json", "Output pure machine-readable JSON format")
+  .action(async (sourceId, options) => {
+    try {
+      await runMcpTrustCommand(sourceId, options);
+    } catch (err: any) {
+      console.error(`\n❌ Error: ${err.message}`);
       process.exit(1);
     }
   });
@@ -396,6 +618,156 @@ secCmd
   .action(async (options) => {
     try {
       await runSecurityFlowsCommand(options);
+    } catch (err: any) {
+      console.error(`\n❌ Error: ${err.message}`);
+      process.exit(1);
+    }
+  });
+
+// 11. Incidents Command (`agent-monitor incidents`)
+const incCmd = program
+  .command("incidents")
+  .description("Manage and investigate security incidents");
+
+incCmd
+  .command("list", { isDefault: true })
+  .description("List security incidents recorded by the control plane")
+  .option("-s, --session <id>", "Filter by session ID")
+  .option(
+    "--status <status>",
+    "Filter by status (OPEN, INVESTIGATING, CONTAINED, RESOLVED, FALSE_POSITIVE)",
+  )
+  .option(
+    "--severity <severity>",
+    "Filter by severity (CRITICAL, HIGH, MEDIUM, LOW)",
+  )
+  .option("-w, --workspace <path>", "Workspace directory", process.cwd())
+  .option("--db <path>", "Custom SQLite database file path")
+  .option("--json", "Output pure machine-readable JSON format")
+  .action(async (options) => {
+    try {
+      await runIncidentsListCommand(options);
+    } catch (err: any) {
+      console.error(`\n❌ Error: ${err.message}`);
+      process.exit(1);
+    }
+  });
+
+incCmd
+  .command("show <id>")
+  .description("Show detailed security incident information")
+  .option("-w, --workspace <path>", "Workspace directory", process.cwd())
+  .option("--db <path>", "Custom SQLite database file path")
+  .option("--json", "Output pure machine-readable JSON format")
+  .action(async (id, options) => {
+    try {
+      await runIncidentShowCommand(id, options);
+    } catch (err: any) {
+      console.error(`\n❌ Error: ${err.message}`);
+      process.exit(1);
+    }
+  });
+
+incCmd
+  .command("update <id>")
+  .description("Update security incident status or resolution notes")
+  .option(
+    "--status <status>",
+    "New status (OPEN, INVESTIGATING, CONTAINED, RESOLVED, FALSE_POSITIVE)",
+  )
+  .option("--severity <severity>", "New severity (CRITICAL, HIGH, MEDIUM, LOW)")
+  .option("--notes <notes>", "Resolution notes or comments")
+  .option("-w, --workspace <path>", "Workspace directory", process.cwd())
+  .option("--db <path>", "Custom SQLite database file path")
+  .option("--json", "Output pure machine-readable JSON format")
+  .action(async (id, options) => {
+    try {
+      await runIncidentUpdateCommand(id, options, options);
+    } catch (err: any) {
+      console.error(`\n❌ Error: ${err.message}`);
+      process.exit(1);
+    }
+  });
+
+incCmd
+  .command("events <id>")
+  .description("List audit events tied to a security incident")
+  .option("-w, --workspace <path>", "Workspace directory", process.cwd())
+  .option("--db <path>", "Custom SQLite database file path")
+  .option("--json", "Output pure machine-readable JSON format")
+  .action(async (id, options) => {
+    try {
+      await runIncidentEventsCommand(id, options);
+    } catch (err: any) {
+      console.error(`\n❌ Error: ${err.message}`);
+      process.exit(1);
+    }
+  });
+
+// 12. Audit Trail Integrity Command (`agent-monitor audit verify`)
+const auditCmd = program
+  .command("audit")
+  .description("Verify cryptographic integrity of the SQLite audit log");
+
+auditCmd
+  .command("verify")
+  .description("Verify SHA-256 hash chaining of audit events across sessions")
+  .option(
+    "-s, --session <id>",
+    "Target session ID (verifies all sessions if omitted)",
+  )
+  .option("-w, --workspace <path>", "Workspace directory", process.cwd())
+  .option("--db <path>", "Custom SQLite database file path")
+  .option("--json", "Output pure machine-readable JSON format")
+  .action(async (options) => {
+    try {
+      await runAuditVerifyCommand(options);
+    } catch (err: any) {
+      console.error(`\n❌ Error: ${err.message}`);
+      process.exit(1);
+    }
+  });
+
+auditCmd
+  .command("export")
+  .description(
+    "Export deterministic, canonical cryptographically-chained event ledger",
+  )
+  .option("-s, --session <id>", "Filter export by session ID")
+  .option("-o, --output <path>", "Write exported ledger to a file path")
+  .option("-w, --workspace <path>", "Workspace directory", process.cwd())
+  .option("--db <path>", "Custom SQLite database file path")
+  .option("--json", "Output pure machine-readable JSON format")
+  .action(async (options) => {
+    try {
+      await runAuditExportCommand(options);
+    } catch (err: any) {
+      console.error(`\n❌ Error: ${err.message}`);
+      process.exit(1);
+    }
+  });
+
+// 13. Events Stream Command (`agent-monitor events`)
+program
+  .command("events")
+  .description("Inspect chronological event log stream with filtering")
+  .option("-s, --session <id>", "Filter by session ID")
+  .option(
+    "-t, --type <type>",
+    "Filter by event type (e.g. action.blocked, incident.created)",
+  )
+  .option(
+    "-n, --limit <count>",
+    "Maximum number of events to show",
+    (val) => parseInt(val, 10),
+    50,
+  )
+  .option("-w, --workspace <path>", "Workspace directory", process.cwd())
+  .option("--db <path>", "Custom SQLite database file path")
+  .option("--json", "Output pure machine-readable JSON format")
+  .action(async (options) => {
+    try {
+      await runEventsCommand(options);
     } catch (err: any) {
       console.error(`\n❌ Error: ${err.message}`);
       process.exit(1);

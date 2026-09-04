@@ -6,3 +6,7 @@ export * from "./approvals/index.js";
 export * from "./normalization/index.js";
 export * from "./fingerprint/index.js";
 export * from "./behavior/index.js";
+export * from "./incidents/index.js";
+export * from "./mcp/index.js";
+export * from "./audit/index.js";
+export * from "./secrets/index.js";

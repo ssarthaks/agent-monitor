@@ -1,6 +1,6 @@
 {
   "name": "agent-monitor-monorepo",
-  "version": "0.3.0",
+  "version": "4.1.0",
   "private": true,
   "description": "Agent Monitor - Local-First Activity Monitor & Deterministic Policy Gate for AI Agents",
   "workspaces": [

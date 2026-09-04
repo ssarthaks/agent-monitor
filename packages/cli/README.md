@@ -19,34 +19,50 @@ agent-monitor run --task "Inspect repository and run tests"
 # 2. Simulate policy evaluation (Dry Run)
 agent-monitor policy check --command "git push origin main"
 
-# 3. Bootstrap configuration file
+# 3. Policy versioning & instant rollback
+agent-monitor policy versions
+agent-monitor policy diff 1 2
+agent-monitor policy rollback 1
+agent-monitor policy disable ask-npm-install
+
+# 4. Security incidents case management
+agent-monitor incidents list --status OPEN --severity CRITICAL
+agent-monitor incidents show <incident-id>
+agent-monitor incidents update <incident-id> --status CONTAINED
+agent-monitor incidents events <incident-id>
+
+# 5. MCP source quarantine & trust lifecycle
+agent-monitor mcp list
+agent-monitor mcp quarantine <source-id> --reason "Schema mutation"
+agent-monitor mcp trust <source-id>
+
+# 6. Cryptographic audit log verification
+agent-monitor audit verify
+
+# 7. Raw event log queries
+agent-monitor events --type action.blocked --limit 20
+
+# 8. Machine-readable JSON output for CI / SIEM
+agent-monitor incidents list --json
+agent-monitor audit verify --json
+
+# 9. Bootstrap configuration file
 agent-monitor config init
 
-# 4. Validate configuration syntax and rules
-agent-monitor config validate
-
-# 5. List recorded sessions
-agent-monitor sessions
-
-# 6. Show system status and database storage
-agent-monitor status
-
-# 7. Start standalone Monitor Server & Web Dashboard
+# 10. Start standalone Monitor Server & Web Dashboard
 agent-monitor server
 
-# 8. Run transparent MCP stdio proxy with deterministic security boundary
+# 11. Run transparent MCP stdio proxy with deterministic controls
 agent-monitor mcp proxy -- npx -y @modelcontextprotocol/server-filesystem /tmp
 
-# 9. Activate authoritative local Kill Switch circuit breaker
+# 12. Authoritative Kill Switch circuit breaker
 agent-monitor kill --session <session-id> --reason "Operator manual abort"
-
-# 10. Deactivate Kill Switch and resume session execution
 agent-monitor resume --session <session-id>
 
-# 11. Inspect external tool fingerprints and mutation status (rug-pull detection)
+# 13. Inspect external tool fingerprints and mutation status
 agent-monitor tools --session <session-id>
 
-# 12. Inspect behavioral data flows and security sequence violations
+# 14. Inspect behavioral data flows and security sequence violations
 agent-monitor security flows --session <session-id>
 ```
 
