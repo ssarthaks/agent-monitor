@@ -91,8 +91,7 @@ function DashboardContent() {
       {error && (
         <div className="mx-4 sm:mx-6 mt-3 p-3 rounded bg-rose-50 border border-rose-200 text-rose-900 text-xs flex flex-wrap items-center justify-between gap-2">
           <span className="font-semibold">
-            ⚠️ Backend offline: {error} (Ensure monitor server is running on
-            port 4040)
+            ⚠️ Backend offline: {error} (Ensure monitor server is running)
           </span>
           <span className="font-mono text-[11px] font-bold text-rose-700 bg-white px-2 py-0.5 rounded border border-rose-200">
             npm run cli -- run

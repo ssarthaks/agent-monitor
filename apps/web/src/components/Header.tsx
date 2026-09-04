@@ -209,8 +209,7 @@ export function Header({
                   AGENT MONITOR
                 </span>
                 <span className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded bg-alabaster-muted text-ink border border-alabaster-border">
-                  V0.3
-                  V4.0.0
+                  V4.1.0
                 </span>
               </div>
             </div>

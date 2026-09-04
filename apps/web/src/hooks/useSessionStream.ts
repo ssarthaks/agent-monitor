@@ -53,11 +53,11 @@ export function useSessionStream(targetSessionId?: string | null) {
   const lastSeqRef = useRef<number>(0);
 
   const serverBase =
-    typeof window !== "undefined" &&
-    (window.location.port === "4040" ||
-      window.location.hostname === "127.0.0.1" ||
-      window.location.hostname === "localhost")
-      ? `${window.location.protocol}//${window.location.hostname}:4040`
+    typeof window !== "undefined"
+      ? window.location.port === "3000"
+        ? process.env.NEXT_PUBLIC_SERVER_URL ||
+          `${window.location.protocol}//${window.location.hostname}:4040`
+        : window.location.origin
       : process.env.NEXT_PUBLIC_SERVER_URL || "http://127.0.0.1:4040";
 
   // 1. Poll session list periodically to catch new sessions in real time
