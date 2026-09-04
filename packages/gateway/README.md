@@ -1,6 +1,6 @@
 # `@agent-monitor/gateway`
 
-Universal Agent Control Boundary & Transparent Model Context Protocol (MCP) Stdio Proxy for Agent Monitor (V0.3).
+Universal Agent Control Boundary & Transparent Model Context Protocol (MCP) Stdio Proxy for Agent Monitor (V4.1.0).
 
 ---
 
@@ -10,7 +10,7 @@ Universal Agent Control Boundary & Transparent Model Context Protocol (MCP) Stdi
 
 It enforces the non-negotiable **Core Security Invariant** across all tool calls and resource accesses:
 
-$$\text{REQUEST} \longrightarrow \text{KILL SWITCH} \longrightarrow \text{NORMALIZATION} \longrightarrow \text{GUARDRAILS} \longrightarrow \text{RISK} \longrightarrow \text{POLICY} \longrightarrow \text{APPROVAL} \longrightarrow \text{POST-APPROVAL KILL CHECK} \longrightarrow \text{EXECUTION} \longrightarrow \text{INSPECTION} \longrightarrow \text{SQLITE}$$
+$$\text{REQUEST} \longrightarrow \text{KILL SWITCH} \longrightarrow \text{QUARANTINE} \longrightarrow \text{RATE LIMIT} \longrightarrow \text{NORMALIZATION} \longrightarrow \text{GUARDRAILS} \longrightarrow \text{RISK/MUTATION} \longrightarrow \text{POLICY} \longrightarrow \text{APPROVAL} \longrightarrow \text{REVALIDATION} \longrightarrow \text{EXECUTION} \longrightarrow \text{INSPECTION} \longrightarrow \text{SQLITE} \longrightarrow \text{INCIDENT}$$
 
 ---
 

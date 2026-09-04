@@ -1,7 +1,7 @@
 {
   "name": "@agent-monitor/gateway",
   "version": "4.1.0",
-  "description": "Universal Agent Control Boundary & Transparent MCP Proxy for Agent Monitor (V4.0.0)",
+  "description": "Universal Agent Control Boundary & Transparent MCP Proxy for Agent Monitor (V4.1.0)",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",

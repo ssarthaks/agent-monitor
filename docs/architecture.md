@@ -116,40 +116,40 @@ Agent Monitor is architected as a **local-first, production control plane, unive
 
 ---
 
-## Non-Negotiable 13-Stage Security Invariant
+## Non-Negotiable 14-Stage Security Invariant
 
 ```text
-REQUEST
-  ↓
-1. KILL SWITCH (Authoritative SQLite WAL Check)
-  ↓
-2. SOURCE QUARANTINE (Sticky Isolation)
-  ↓
-3. RATE LIMITING (Sliding Window)
-  ↓
-4. ACTION NORMALIZATION (RFC 8089 URI Canonicalization)
-  ↓
-5. WORKSPACE GUARDRAILS (Path Traversal & Symlink Escapes)
-  ↓
-6. RISK ASSESSMENT & SCHEMA MUTATION CHECK (CWE Scored Analysis)
-  ↓
-7. DETERMINISTIC POLICY EVALUATION (Additive Specificity)
-  ↓
-8. HUMAN APPROVAL IF ASK (Terminal / Web UI)
-  ↓
-9. POST-APPROVAL COMPREHENSIVE REVALIDATION
-   - Hash Context Match (No Parameter Tampering)
-   - Expiration Check
-   - Active Policy Version Match
-   - Kill Switch Re-Verification
-  ↓
-10. DOWNSTREAM EXECUTION (with Bounded Timeouts & Idempotency)
-  ↓
-11. RESULT INSPECTION & SECRET REDACTION (500KB Bound)
-  ↓
-12. SQLITE PERSISTENCE WITH SHA-256 HASH CHAINING
-  ↓
-13. AUTOMATIC INCIDENT CREATION & CLIENT DISPATCH
+ 1. INGRESS REQUEST & PAYLOAD BOUNDS (10MB JSON-RPC frame, 1MB arguments)
+   ↓
+ 2. KILL SWITCH (Authoritative SQLite WAL Check)
+   ↓
+ 3. SOURCE QUARANTINE (Sticky Isolation)
+   ↓
+ 4. RATE LIMITING (Sliding Window)
+   ↓
+ 5. ACTION NORMALIZATION (RFC 8089 URI Canonicalization)
+   ↓
+ 6. WORKSPACE GUARDRAILS (Path Traversal & Symlink Escapes)
+   ↓
+ 7. RISK ASSESSMENT & SCHEMA MUTATION CHECK (CWE Scored Analysis)
+   ↓
+ 8. DETERMINISTIC POLICY EVALUATION (Additive Specificity: DENY > ASK > ALLOW)
+   ↓
+ 9. HUMAN APPROVAL IF ASK (Terminal / Web UI)
+   ↓
+10. POST-APPROVAL COMPREHENSIVE REVALIDATION
+    - Hash Context Match (No Parameter Tampering)
+    - Expiration Check
+    - Active Policy Version Match
+    - Kill Switch & Quarantine Re-Verification
+   ↓
+11. DOWNSTREAM EXECUTION (with Bounded Timeouts & Idempotency)
+   ↓
+12. RESULT INSPECTION & SECRET REDACTION (500KB Bound)
+   ↓
+13. SQLITE WAL PERSISTENCE WITH SHA-256 HASH CHAINING
+   ↓
+14. AUTOMATIC INCIDENT ESCALATION & CLIENT DISPATCH
 ```
 
 ---

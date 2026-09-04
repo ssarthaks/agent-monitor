@@ -279,7 +279,7 @@ agent-monitor/
 
 | Guide | Description |
 | :--- | :--- |
-| 🏛️ [**Architecture**](docs/architecture.md) | System components, 13-stage security invariant, SQLite WAL transactions, package boundaries. |
+| 🏛️ [**Architecture**](docs/architecture.md) | System components, 14-stage security invariant, SQLite WAL transactions, package boundaries. |
 | 🔒 [**Security Model**](docs/security.md) | Guardrails, path containment, approval context hashes, secret redaction, audit chaining. |
 | 🎯 [**Threat Model**](docs/threat-model.md) | STRIDE classification, trust boundaries, adversarial attack vectors, fail-closed invariants. |
 | 🚨 [**Incident Response**](docs/incident-response.md) | Incident lifecycle, forensic investigation, containment runbook, kill switch procedures. |
@@ -296,7 +296,7 @@ agent-monitor/
 
 ## Testing & Quality
 
-Agent Monitor maintains **34 test suites** containing **186 tests** passing at 100% with zero regressions:
+Agent Monitor maintains **34 test suites** containing **202 tests** passing at 100% with zero regressions:
 
 ```bash
 npm test

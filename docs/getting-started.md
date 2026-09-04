@@ -134,7 +134,7 @@ npm run cli -- run --task "Install lodash and write a helper script" --keep-aliv
 2. The Policy Engine triggers an **`ASK`** policy gate.
 3. **Terminal:** Prompts:
    ```text
-   ⚠️  HUMAN APPROVAL REQUIRED (V0.2 Policy Gate)
+   ⚠️  HUMAN APPROVAL REQUIRED (V4.1.0 Policy Gate)
      Action:     process.exec
      Command:    npm install lodash
      Policy:     gate-dependency-install

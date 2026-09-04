@@ -176,9 +176,9 @@ Output:
 
 ---
 
-## 6. Centralized Policy Versioning & Rollback (V4.0.0)
+## 6. Centralized Policy Versioning & Rollback (V4.1.0)
 
-In V4.0.0, security policies are centrally managed and versioned in SQLite. Each policy set is assigned:
+In V4.1.0, security policies are centrally managed and versioned in SQLite. Each policy set is assigned:
 - A monotonically increasing `version_number` (e.g. `1`, `2`, `3`).
 - A cryptographic **SHA-256 content hash** guaranteeing rule immutability.
 - Audit tracking (`created_by`, `created_at`, `name`, `description`).

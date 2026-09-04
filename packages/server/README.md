@@ -13,7 +13,7 @@ Local SQLite WAL persistence, atomic approval resolution, in-memory EventBus, SS
 ## Key Modules
 
 - **`db/database.ts`**: Initializes Better-SQLite3 with `journal_mode = WAL`, foreign keys, and indexes.
-- **`db/migrations/`**: Transactional migration runner executing schema migrations 001 to 006 on startup.
+- **`db/migrations/`**: Transactional migration runner executing schema migrations 001 to 007 (`007_v41_production_hardening`) on startup.
 - **`db/repository.ts`**: `SessionRepository` providing atomic CRUD for sessions, chained events, approvals, authoritative kill switch, sticky MCP quarantine, policy versions, incidents, and tool fingerprints.
 - **`bus.ts`**: In-memory `EventBus` for session-scoped pub/sub.
 - **`app.ts`**: `MonitorServer` handling HTTP REST routes, SSE live stream (`/events/stream`), and static DevTools file serving with strict local-origin CORS validation.

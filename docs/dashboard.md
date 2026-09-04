@@ -1,4 +1,4 @@
-# Web Control Plane & DevTools Dashboard (V4.0.0)
+# Web Control Plane & DevTools Dashboard (V4.1.0)
 
 Agent Monitor embeds a production-grade control plane and security operations dashboard built with Next.js 15, styled in an **Alabaster, Ink, and Burnt Terra Cotta** design system.
 

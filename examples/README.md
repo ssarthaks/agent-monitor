@@ -1,6 +1,6 @@
 # Agent Monitor Examples
 
-Practical examples, configuration patterns, and workflow guides for Agent Monitor V0.2.
+Practical examples, configuration patterns, and workflow guides for Agent Monitor V4.1.0.
 
 ---
 

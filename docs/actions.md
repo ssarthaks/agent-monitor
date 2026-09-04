@@ -23,7 +23,7 @@ export type ActionKind =
 
 ---
 
-## 2. Standard Safe Tools (V0.2)
+## 2. Standard Safe Tools (V4.1.0)
 
 Agent Monitor provides 4 built-in safe tools equipped with guardrails:
 

@@ -6,23 +6,24 @@ This document details the adversarial test suites, fuzzing harnesses, and perfor
 
 ## 1. Test Suite Architecture
 
-Agent Monitor maintains **34 test suites** containing **186 tests** passing at 100% with zero regressions.
+Agent Monitor maintains **34 test suites** containing **202 tests** passing at 100% with zero regressions.
 
 ```text
 packages/
 ├── agent/test/
-│   ├── adversarial-filesystem.test.ts  (14 tests: null bytes, Windows drives, UNC, URL encodings, symlinks)
+│   ├── adversarial-filesystem.test.ts  (26 tests: null bytes, Windows drives, UNC, URL encodings, symlinks, URI schemes, case-insensitivity)
 │   ├── approval-hardening.test.ts      (5 tests: hash mismatch, expiration, policy version changes, kill races)
 │   ├── fuzz-path-resolver.test.ts      (3 tests: 500+ randomized mutation fuzzing iterations)
 │   └── ... (original test suites)
 ├── gateway/test/
 │   ├── adversarial-mcp.test.ts         (4 tests: quarantine enforcement, rug-pull mutations, notification bypass)
-│   ├── resource-exhaustion.test.ts     (4 tests: 1MB arguments, 500KB truncation, secret redaction, buffer limits)
+│   ├── resource-exhaustion.test.ts     (5 tests: 1MB arguments, 500KB truncation, secret redaction, buffer limits, valid JSON bounds)
 │   ├── fuzz-jsonrpc.test.ts            (4 tests: chunk fragmentation, random bytes, malformed framing)
 │   └── ... (original test suites)
 └── server/test/
-    ├── adversarial-audit.test.ts       (8 tests: sequence gaps, duplicates, forged prevHash, tampering)
+    ├── adversarial-audit.test.ts       (10 tests: sequence gaps, duplicates, forged prevHash, tampering, secret persistence, canary test)
     ├── benchmarks.test.ts              (3 tests: hash chaining, policy evaluation, path normalization throughput)
+    ├── migrations.test.ts              (4 tests: schema migrations, idempotency, V0.3 upgrade, corruption fail-closed)
     └── ... (original test suites)
 ```
 
