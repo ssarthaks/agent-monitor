@@ -141,6 +141,7 @@ export class BehavioralEngine {
               timestamp: evt.timestamp || Date.now(),
               sensitivityReason: sensitivity,
             });
+            trimArray(context.sensitiveReads, MAX_BEHAVIORAL_RECORDS);
           }
         } else if (evt.kind === "file.write" && evt.params?.path) {
           context.workspaceWrites.push({
@@ -148,12 +149,14 @@ export class BehavioralEngine {
             path: evt.params.path,
             timestamp: evt.timestamp || Date.now(),
           });
+          trimArray(context.workspaceWrites, MAX_BEHAVIORAL_RECORDS);
         } else if (evt.kind === "process.exec" && evt.params?.command) {
           context.executedCommands.push({
             actionId: evt.actionId,
             command: evt.params.command,
             timestamp: evt.timestamp || Date.now(),
           });
+          trimArray(context.executedCommands, MAX_BEHAVIORAL_RECORDS);
         }
       }
     }

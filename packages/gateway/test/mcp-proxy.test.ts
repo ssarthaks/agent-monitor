@@ -760,6 +760,65 @@ describe("MCP Stdio Proxy Integration & Adversarial Verification (V0.3)", () => 
     await proxy.stop();
   });
 
+  it("ADVERSARIAL: interceptResourceRead blocks RFC 8089 file://localhost/ traversal and remote URIs", async () => {
+    const emittedEvents: AgentEvent[] = [];
+    const eventSink = {
+      emit: async (e: AgentEvent) => {
+        emittedEvents.push(e);
+      },
+    };
+
+    const proxy = new McpStdioProxy({
+      command: "node",
+      args: [mockServerPath],
+      sessionId,
+      workspaceRoot: "/app",
+      repository,
+      policyEngine: new PolicyEngine(),
+      eventSink,
+      clientInputStream: clientIn,
+      clientOutputStream: clientOut,
+      logStream: logOut,
+    });
+
+    await proxy.start();
+
+    // 1. RFC 8089 explicit localhost URI
+    const res1 = await sendRpcRequest(proxy, {
+      jsonrpc: "2.0",
+      id: 810,
+      method: "resources/read",
+      params: { uri: "file://localhost/etc/shadow" },
+    });
+    expect(res1.result.isError).toBe(true);
+    expect(res1.result.content[0].text).toContain("Security Violation");
+    expect(res1.result.content[0].text).not.toContain(
+      "DOWNSTREAM_RESOURCE_SUCCESS",
+    );
+
+    // 2. Remote / IP host file URI (fail closed)
+    const res2 = await sendRpcRequest(proxy, {
+      jsonrpc: "2.0",
+      id: 811,
+      method: "resources/read",
+      params: { uri: "file://127.0.0.1/etc/shadow" },
+    });
+    expect(res2.result.isError).toBe(true);
+    expect(res2.result.content[0].text).toContain("Security Violation");
+
+    // 3. Remote scheme URI (e.g. s3:// or http://)
+    const res3 = await sendRpcRequest(proxy, {
+      jsonrpc: "2.0",
+      id: 812,
+      method: "resources/read",
+      params: { uri: "s3://production-secrets/db.key" },
+    });
+    expect(res3.result.isError).toBe(true);
+    expect(res3.result.content[0].text).toContain("Security Violation");
+
+    await proxy.stop();
+  });
+
   it("ADVERSARIAL: blocks resources/read when kill switch is active", async () => {
     const emittedEvents: AgentEvent[] = [];
     const eventSink = {

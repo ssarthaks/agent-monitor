@@ -1,5 +1,6 @@
 import { spawn, ChildProcess } from "node:child_process";
 import fs from "node:fs";
+import { fileURLToPath } from "node:url";
 import pc from "picocolors";
 import {
   ActionNormalizer,
@@ -537,9 +538,11 @@ export class McpStdioProxy implements ToolGateway {
       isOutsideWorkspace = pathCheck.isOutsideWorkspace;
     }
 
+    const source = `mcp:${this.options.serverName || this.options.command}`;
     const isToolMutated = this.options.repository.isToolMutated(
       this.options.sessionId,
       toolName,
+      source,
     );
 
     const riskAnalyzer = this.options.riskAnalyzer || new RiskAnalyzer();
@@ -1041,13 +1044,23 @@ export class McpStdioProxy implements ToolGateway {
     const actionId = this.generateId("act");
     const startTime = Date.now();
 
-    // Normalize URI to target file path
+    // Normalize URI to target file path using standard fileURLToPath for RFC 8089 compliance
     let filePath = uri;
     if (filePath.startsWith("file://")) {
-      filePath = filePath.replace(/^file:\/\//, "");
-      if (process.platform === "win32" && filePath.startsWith("/")) {
-        filePath = filePath.slice(1);
+      try {
+        filePath = fileURLToPath(uri);
+      } catch {
+        // Remote UNC, invalid host, or malformed file URI -> fail closed as external escape
+        filePath =
+          "/__external_network_or_invalid_host__/" +
+          uri.replace(/^file:\/\//, "");
       }
+    } else if (/^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//.test(filePath)) {
+      // Any non-file URI with an explicit scheme (e.g. http://, s3://, custom://)
+      // Must be treated as external/remote resource outside workspace
+      filePath =
+        "/__external_uri__/" +
+        filePath.replace(/^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//, "");
     }
 
     const actionSource: ActionSource = {

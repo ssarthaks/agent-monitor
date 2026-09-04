@@ -566,19 +566,19 @@ export class SessionRepository {
     }));
   }
 
-  isToolMutated(sessionId: string, toolName: string): boolean {
-    const row = this.db
-      .prepare(
-        `SELECT initial_fingerprint, fingerprint, change_count FROM tool_fingerprints WHERE session_id = ? AND tool_name = ? LIMIT 1`,
-      )
-      .get(sessionId, toolName) as any;
-    if (!row) return false;
-    return (
-      Boolean(row.change_count && row.change_count > 0) ||
-      Boolean(
-        row.initial_fingerprint && row.initial_fingerprint !== row.fingerprint,
-      )
-    );
+  isToolMutated(sessionId: string, toolName: string, source?: string): boolean {
+    let query = `SELECT initial_fingerprint, fingerprint, change_count FROM tool_fingerprints WHERE session_id = ? AND tool_name = ?`;
+    const params: any[] = [sessionId, toolName];
+    if (source) {
+      const altSource = source.startsWith("mcp:")
+        ? source.replace(/^mcp:/, "")
+        : `mcp:${source}`;
+      query += ` AND (source = ? OR source = ?)`;
+      params.push(source, altSource);
+    }
+    query += ` AND (change_count > 0 OR initial_fingerprint != fingerprint) LIMIT 1`;
+    const row = this.db.prepare(query).get(...params) as any;
+    return Boolean(row);
   }
 
   // ─────────────────────────────────────────────────────────────

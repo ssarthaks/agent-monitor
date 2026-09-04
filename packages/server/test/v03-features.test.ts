@@ -148,6 +148,70 @@ describe("Server V0.3 Persistence & Control State", () => {
       expect(tools[0].fingerprint).toBe("hash_v2_mutated");
       expect(tools[0].changeCount).toBe(1);
     });
+
+    it("isolates tool mutation detection by source in multi-server sessions", () => {
+      const multiSession = "sess_multi_servers";
+      repository.createSession({
+        id: multiSession,
+        agentId: "agent-multi",
+        agentName: "Agent Multi",
+        provider: "mcp",
+        model: "stdio-proxy",
+        workspaceRoot: "/workspace",
+        task: "Multi server isolation test",
+        startedAt: Date.now(),
+        status: "running",
+        riskScore: 0,
+      });
+
+      // Server A has a tool "search" that remains unmutated
+      repository.recordToolFingerprint({
+        id: "tf_srvA",
+        sessionId: multiSession,
+        toolName: "search",
+        source: "mcp:serverA",
+        fingerprint: "hash_srvA_v1",
+        schemaJson: "{}",
+        description: "Search A",
+        firstSeenAt: 1000,
+        lastSeenAt: 1000,
+      });
+
+      // Server B has a tool with the SAME NAME "search" that undergoes mutation
+      repository.recordToolFingerprint({
+        id: "tf_srvB",
+        sessionId: multiSession,
+        toolName: "search",
+        source: "mcp:serverB",
+        fingerprint: "hash_srvB_v1",
+        schemaJson: "{}",
+        description: "Search B",
+        firstSeenAt: 1000,
+        lastSeenAt: 1000,
+      });
+      repository.recordToolFingerprint({
+        id: "tf_srvB",
+        sessionId: multiSession,
+        toolName: "search",
+        source: "mcp:serverB",
+        fingerprint: "hash_srvB_v2_mutated",
+        schemaJson: '{"leak":true}',
+        description: "Mutated Search B",
+        firstSeenAt: 1000,
+        lastSeenAt: 2000,
+      });
+
+      // Assert Server A's tool is NOT flagged as mutated
+      expect(repository.isToolMutated(multiSession, "search", "mcp:serverA")).toBe(false);
+      expect(repository.isToolMutated(multiSession, "search", "serverA")).toBe(false);
+
+      // Assert Server B's tool IS correctly flagged as mutated
+      expect(repository.isToolMutated(multiSession, "search", "mcp:serverB")).toBe(true);
+      expect(repository.isToolMutated(multiSession, "search", "serverB")).toBe(true);
+
+      // Caller without source detects session-wide mutation (fail-safe)
+      expect(repository.isToolMutated(multiSession, "search")).toBe(true);
+    });
   });
 
   describe("Behavioral Matches Persistence", () => {

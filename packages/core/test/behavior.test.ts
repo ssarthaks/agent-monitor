@@ -113,4 +113,51 @@ describe("Sequence-Aware Behavioral Security & Data-Flow Engine (V0.3)", () => {
       "block-network-after-secrets",
     );
   });
+
+  it("bounds memory during reconstructFromEvents when rehydrating large histories", () => {
+    const engine = new BehavioralEngine();
+    const sessionId = "ses_large_history";
+
+    // Generate 250 sensitive read events, 250 write events, and 250 exec events
+    const events: any[] = [];
+    for (let i = 0; i < 250; i++) {
+      events.push({
+        type: "action.completed",
+        actionId: `act_read_${i}`,
+        kind: "file.read",
+        params: { path: ".env" },
+        timestamp: 1000 + i,
+      });
+      events.push({
+        type: "action.completed",
+        actionId: `act_write_${i}`,
+        kind: "file.write",
+        params: { path: `src/file_${i}.ts` },
+        timestamp: 1000 + i,
+      });
+      events.push({
+        type: "action.completed",
+        actionId: `act_exec_${i}`,
+        kind: "process.exec",
+        params: { command: `echo ${i}` },
+        timestamp: 1000 + i,
+      });
+    }
+
+    engine.reconstructFromEvents(sessionId, events);
+    const ctx = engine.getContext(sessionId);
+
+    // Each context array must be bounded to MAX_BEHAVIORAL_RECORDS (200)
+    expect(ctx.sensitiveReads.length).toBe(200);
+    expect(ctx.workspaceWrites.length).toBe(200);
+    expect(ctx.executedCommands.length).toBe(200);
+
+    // The oldest 50 records should have been evicted (sliding window keeps latest)
+    expect(ctx.sensitiveReads[0].actionId).toBe("act_read_50");
+    expect(ctx.sensitiveReads[199].actionId).toBe("act_read_249");
+    expect(ctx.workspaceWrites[0].actionId).toBe("act_write_50");
+    expect(ctx.workspaceWrites[199].actionId).toBe("act_write_249");
+    expect(ctx.executedCommands[0].actionId).toBe("act_exec_50");
+    expect(ctx.executedCommands[199].actionId).toBe("act_exec_249");
+  });
 });

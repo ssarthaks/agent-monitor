@@ -175,4 +175,43 @@ describe("CLI Commands & Configuration Bootstrap", () => {
       runSecurityFlowsCommand({ session: "ses_cli_tools_test", db: dbPath }),
     ).resolves.not.toThrow();
   });
+
+  it("policy check correctly detects outside-workspace paths and evaluates to DENY", async () => {
+    const { runPolicyCheckCommand } = await import("../src/commands/check.js");
+
+    const logs: string[] = [];
+    const originalLog = console.log;
+    console.log = (...args: any[]) => {
+      logs.push(args.join(" "));
+    };
+
+    try {
+      // 1. Check path outside workspace
+      await runPolicyCheckCommand({
+        action: "file.read",
+        path: "../../etc/passwd",
+        workspace: tmpDir,
+      });
+
+      const output1 = logs.join("\n");
+      expect(output1).toContain("OUTSIDE WORKSPACE");
+      expect(output1).toContain("DENY");
+      expect(output1).toContain("deny-outside-workspace");
+
+      logs.length = 0;
+
+      // 2. Check path inside workspace
+      await runPolicyCheckCommand({
+        action: "file.read",
+        path: "safe-file.txt",
+        workspace: tmpDir,
+      });
+
+      const output2 = logs.join("\n");
+      expect(output2).not.toContain("OUTSIDE WORKSPACE");
+      expect(output2).toContain("ALLOW");
+    } finally {
+      console.log = originalLog;
+    }
+  });
 });

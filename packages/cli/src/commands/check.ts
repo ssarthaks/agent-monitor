@@ -7,6 +7,7 @@ import {
   ActionKind,
   ActionCategory,
 } from "@agent-monitor/core";
+import { resolveSafeWorkspacePath } from "@agent-monitor/agent";
 
 export interface PolicyCheckOptions {
   action?: string;
@@ -47,13 +48,20 @@ export async function runPolicyCheckCommand(
   if (options.command) params.command = options.command;
   if (options.path) params.path = options.path;
 
-  // 1. Calculate Risk (Dry-Run)
+  // 1. Check workspace containment
+  let isOutsideWorkspace = false;
+  if (params.path) {
+    const pathCheck = resolveSafeWorkspacePath(params.path, workspaceRoot);
+    isOutsideWorkspace = pathCheck.isOutsideWorkspace;
+  }
+
+  // 2. Calculate Risk (Dry-Run)
   const riskAnalyzer = new RiskAnalyzer();
   const risk = riskAnalyzer.analyze(actionKind, params, {
-    isOutsideWorkspace: false,
+    isOutsideWorkspace,
   });
 
-  // 2. Evaluate Policy (Dry-Run)
+  // 3. Evaluate Policy (Dry-Run)
   const evaluation = policyEngine.evaluate(
     {
       kind: actionKind,
@@ -63,7 +71,7 @@ export async function runPolicyCheckCommand(
     },
     {
       workspaceRoot,
-      isOutsideWorkspace: false,
+      isOutsideWorkspace,
     },
   );
 
@@ -99,6 +107,11 @@ export async function runPolicyCheckCommand(
   }
   if (params.path) {
     console.log(`  ${pc.bold("Path:")}           ${pc.cyan(params.path)}`);
+    if (isOutsideWorkspace) {
+      console.log(
+        `  ${pc.bold("Workspace:")}      ${pc.red("OUTSIDE WORKSPACE")}`,
+      );
+    }
   }
   console.log(
     `  ${pc.bold("Risk Score:")}     ${
