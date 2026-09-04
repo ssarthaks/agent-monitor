@@ -1306,6 +1306,24 @@ export class McpStdioProxy implements ToolGateway {
     const actionId = this.generateId("act");
     const startTime = Date.now();
 
+    // 0. Payload Size Bounds Check (Resource read args <= 1MB)
+    const serializedParams = JSON.stringify(rawParams);
+    if (Buffer.byteLength(serializedParams, "utf8") > 1024 * 1024) {
+      return {
+        jsonrpc: "2.0",
+        id: request.id,
+        result: {
+          isError: true,
+          content: [
+            {
+              type: "text",
+              text: "Resource read arguments exceed maximum allowed payload size of 1MB",
+            },
+          ],
+        },
+      };
+    }
+
     // Normalize URI to target file path using standard fileURLToPath for RFC 8089 compliance
     let filePath = uri;
     if (filePath.startsWith("file://")) {
@@ -1331,6 +1349,9 @@ export class McpStdioProxy implements ToolGateway {
       transport: "stdio",
       toolName: "resources/read",
     };
+    const sourceId = actionSource.server
+      ? `mcp:${actionSource.server}`
+      : "default";
 
     const canonical = {
       kind: "file.read" as const,
@@ -1398,14 +1419,8 @@ export class McpStdioProxy implements ToolGateway {
     }
 
     // 1b. Authoritative Source Quarantine Check
-    if (
-      this.options.repository.isSourceQuarantined(
-        actionSource.server ? `mcp:${actionSource.server}` : "default",
-      )
-    ) {
-      const qSourceId = actionSource.server
-        ? `mcp:${actionSource.server}`
-        : "default";
+    if (this.options.repository.isSourceQuarantined(sourceId)) {
+      const qSourceId = sourceId;
       const blockedEvent: ActionBlockedEvent = {
         id: this.generateId("evt"),
         sequence: this.options.repository.getNextSequence(

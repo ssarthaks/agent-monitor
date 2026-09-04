@@ -4,41 +4,7 @@ import {
   ToolComparisonStatus,
   ToolFingerprintComparison,
 } from "./types.js";
-
-/**
- * Deterministically canonicalizes any JavaScript value into a stable JSON string.
- * Object keys are sorted alphabetically at every level of depth.
- * Numbers, strings, booleans, and null are formatted consistently.
- * Array element order is preserved.
- */
-export function canonicalizeJson(value: any): string {
-  if (value === null || value === undefined) {
-    return "null";
-  }
-
-  if (typeof value === "boolean" || typeof value === "number") {
-    return JSON.stringify(value);
-  }
-
-  if (typeof value === "string") {
-    return JSON.stringify(value);
-  }
-
-  if (Array.isArray(value)) {
-    const items = value.map((item) => canonicalizeJson(item));
-    return `[${items.join(",")}]`;
-  }
-
-  if (typeof value === "object") {
-    const sortedKeys = Object.keys(value).sort();
-    const pairs = sortedKeys
-      .filter((k) => value[k] !== undefined)
-      .map((k) => `${JSON.stringify(k)}:${canonicalizeJson(value[k])}`);
-    return `{${pairs.join(",")}}`;
-  }
-
-  return JSON.stringify(value);
-}
+import { canonicalizeJson } from "../audit/hash.js";
 
 /**
  * Calculates a stable SHA-256 fingerprint for an external tool definition.

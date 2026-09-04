@@ -1,5 +1,6 @@
 import path from "node:path";
 import fs from "node:fs";
+import { fileURLToPath } from "node:url";
 
 export const MAX_FILE_SIZE_BYTES = 2 * 1024 * 1024; // 2 MB
 export const MAX_COMMAND_OUTPUT_BYTES = 100 * 1024; // 100 KB
@@ -50,6 +51,34 @@ export function resolveSafeWorkspacePath(
       safePath: "",
       isOutsideWorkspace: true,
       reason: `Decoded path contains null byte injection: '${cleanPath}'`,
+    };
+  }
+
+  // URI scheme detection & normalization (e.g. file://, s3://, http://)
+  if (
+    cleanPath.toLowerCase().startsWith("file:") ||
+    targetPath.toLowerCase().startsWith("file:")
+  ) {
+    const uriCandidate = cleanPath.toLowerCase().startsWith("file:")
+      ? cleanPath
+      : targetPath;
+    try {
+      cleanPath = fileURLToPath(uriCandidate);
+    } catch {
+      return {
+        safePath: targetPath,
+        isOutsideWorkspace: true,
+        reason: `Invalid or remote file URI: '${targetPath}'`,
+      };
+    }
+  } else if (
+    /^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//.test(cleanPath) ||
+    /^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//.test(targetPath)
+  ) {
+    return {
+      safePath: targetPath,
+      isOutsideWorkspace: true,
+      reason: `External non-file URI scheme: '${targetPath}'`,
     };
   }
 

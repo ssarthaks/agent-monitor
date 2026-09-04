@@ -157,6 +157,14 @@ export class ActionInterceptor {
     const actionId = this.generateId("act");
     const startTime = Date.now();
 
+    // 0. Payload Size Bounds Check (Tool arguments <= 1MB)
+    const serializedArgs = JSON.stringify(rawParams || {});
+    if (Buffer.byteLength(serializedArgs, "utf8") > 1024 * 1024) {
+      throw new Error(
+        "Tool arguments exceed maximum allowed payload size of 1MB",
+      );
+    }
+
     // 0. Kill Switch Check (Authoritative Local Circuit Breaker)
     if (this.isKillSwitchActive && this.isKillSwitchActive(ctx.sessionId)) {
       const blockedEvent: ActionBlockedEvent = {

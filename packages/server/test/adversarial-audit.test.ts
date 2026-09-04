@@ -1,7 +1,11 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { createDatabase } from "../src/db/database.js";
 import { SessionRepository } from "../src/db/repository.js";
-import { verifyEventChain, exportCanonicalLedger, canonicalizeJson } from "@agent-monitor/core";
+import {
+  verifyEventChain,
+  exportCanonicalLedger,
+  canonicalizeJson,
+} from "@agent-monitor/core";
 
 describe("Adversarial Audit Integrity & Tamper Resistance Tests", () => {
   let db: any;
@@ -53,7 +57,9 @@ describe("Adversarial Audit Integrity & Tamper Resistance Tests", () => {
 
     expect(res.verified).toBe(false);
     expect(res.brokenAtSequence).toBe(4);
-    expect(res.reason).toMatch(/Sequence monotonicity violation.*expected sequence 3, found 4/);
+    expect(res.reason).toMatch(
+      /Sequence monotonicity violation.*expected sequence 3, found 4/,
+    );
   });
 
   it("detects duplicate sequence numbers", () => {
@@ -63,7 +69,9 @@ describe("Adversarial Audit Integrity & Tamper Resistance Tests", () => {
     const res = verifyEventChain(duplicated as any);
 
     expect(res.verified).toBe(false);
-    expect(res.reason).toMatch(/Sequence monotonicity violation|Duplicate sequence number/);
+    expect(res.reason).toMatch(
+      /Sequence monotonicity violation|Duplicate sequence number/,
+    );
   });
 
   it("detects genesis sequence violation when chain does not start at sequence 1", () => {
@@ -72,16 +80,23 @@ describe("Adversarial Audit Integrity & Tamper Resistance Tests", () => {
     const res = verifyEventChain(nonGenesis as any);
 
     expect(res.verified).toBe(false);
-    expect(res.reason).toMatch(/Genesis violation: First event sequence must be 1/);
+    expect(res.reason).toMatch(
+      /Genesis violation: First event sequence must be 1/,
+    );
   });
 
   it("detects genesis prevHash violation when first event specifies a prevHash", () => {
     const events = insertChain(2);
-    const forgedGenesis = [{ ...events[0], prevHash: "0123456789abcdef" }, events[1]];
+    const forgedGenesis = [
+      { ...events[0], prevHash: "0123456789abcdef" },
+      events[1],
+    ];
     const res = verifyEventChain(forgedGenesis as any);
 
     expect(res.verified).toBe(false);
-    expect(res.reason).toMatch(/Genesis violation: First event must have null prevHash/);
+    expect(res.reason).toMatch(
+      /Genesis violation: First event must have null prevHash/,
+    );
   });
 
   it("detects forged prevHash linking", () => {
@@ -89,7 +104,11 @@ describe("Adversarial Audit Integrity & Tamper Resistance Tests", () => {
     // Tamper prevHash of event 2
     const tampered = [
       events[0],
-      { ...events[1], prevHash: "bad0000000000000000000000000000000000000000000000000000000000000" },
+      {
+        ...events[1],
+        prevHash:
+          "bad0000000000000000000000000000000000000000000000000000000000000",
+      },
       events[2],
     ];
     const res = verifyEventChain(tampered as any);
@@ -102,10 +121,14 @@ describe("Adversarial Audit Integrity & Tamper Resistance Tests", () => {
   it("detects payload modification in database even when hash is preserved", () => {
     insertChain(3);
     // Maliciously modify the payload directly in SQLite
-    const row = db.prepare("SELECT payload_json FROM events WHERE sequence = 2").get() as any;
+    const row = db
+      .prepare("SELECT payload_json FROM events WHERE sequence = 2")
+      .get() as any;
     const parsed = JSON.parse(row.payload_json);
     parsed.content = "Attacker hijacked message";
-    db.prepare("UPDATE events SET payload_json = ? WHERE sequence = 2").run(JSON.stringify(parsed));
+    db.prepare("UPDATE events SET payload_json = ? WHERE sequence = 2").run(
+      JSON.stringify(parsed),
+    );
 
     const events = repo.getEventsBySession(sessionId, 0);
     const res = verifyEventChain(events as any);
@@ -120,12 +143,16 @@ describe("Adversarial Audit Integrity & Tamper Resistance Tests", () => {
     const objB = { a: "hello", b: { x: false, y: true }, m: [3, 2, 1], z: 1 };
 
     expect(canonicalizeJson(objA)).toBe(canonicalizeJson(objB));
-    expect(canonicalizeJson(objA)).toBe('{"a":"hello","b":{"x":false,"y":true},"m":[3,2,1],"z":1}');
+    expect(canonicalizeJson(objA)).toBe(
+      '{"a":"hello","b":{"x":false,"y":true},"m":[3,2,1],"z":1}',
+    );
   });
 
   it("exports canonical ledger and confirms full verification", () => {
     const events = insertChain(3);
-    const exportedJson = exportCanonicalLedger(events as any, { exportedAt: 1234567890 });
+    const exportedJson = exportCanonicalLedger(events as any, {
+      exportedAt: 1234567890,
+    });
     expect(typeof exportedJson).toBe("string");
 
     const parsed = JSON.parse(exportedJson);
@@ -134,5 +161,38 @@ describe("Adversarial Audit Integrity & Tamper Resistance Tests", () => {
     expect(parsed.verification.verified).toBe(true);
     expect(parsed.events.length).toBe(3);
     expect(parsed.events[0].sequence).toBe(1);
+  });
+
+  it("redacts credentials before SQLite persistence and hashes the redacted payload", () => {
+    const rawSecret = "ghp_1234567890abcdefghijklmnopqrstuvwxyzAB";
+    repo.insertEvent({
+      id: "evt_secret_test",
+      sessionId,
+      agentId: "agent_audit",
+      timestamp: 2000,
+      type: "agent.message",
+      content: `Here is the token: ${rawSecret}`,
+      metadata: {
+        token: rawSecret,
+        nested: {
+          awsKey: "AKIAIOSFODNN7EXAMPLE",
+        },
+      },
+    } as any);
+
+    // Read directly from raw SQLite row
+    const row = db
+      .prepare("SELECT payload_json FROM events WHERE id = ?")
+      .get("evt_secret_test") as any;
+    expect(row).toBeDefined();
+    expect(row.payload_json).not.toContain(rawSecret);
+    expect(row.payload_json).not.toContain("AKIAIOSFODNN7EXAMPLE");
+    expect(row.payload_json).toContain("[REDACTED:GITHUB_TOKEN]");
+    expect(row.payload_json).toContain("[REDACTED:AWS_ACCESS_KEY]");
+
+    // Verify event chain integrity passes with the persisted sanitized payload
+    const allEvents = repo.getEventsBySession(sessionId, 0);
+    const verifyRes = verifyEventChain(allEvents as any);
+    expect(verifyRes.verified).toBe(true);
   });
 });

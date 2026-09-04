@@ -23,6 +23,7 @@ import {
   computeSourceFingerprint,
   computeToolSchemaFingerprint,
   exportCanonicalLedger,
+  redactSecretsDeep,
 } from "@agent-monitor/core";
 
 export class SessionRepository {
@@ -246,31 +247,37 @@ export class SessionRepository {
       riskFlagsJson = JSON.stringify(event.risk.flags);
     }
 
+    const sanitizedEvent = redactSecretsDeep(event).value;
+
     const sequence =
-      typeof event.sequence === "number" && event.sequence > 0
-        ? event.sequence
-        : this.getNextSequence(event.sessionId);
+      typeof sanitizedEvent.sequence === "number" && sanitizedEvent.sequence > 0
+        ? sanitizedEvent.sequence
+        : this.getNextSequence(sanitizedEvent.sessionId);
+    (sanitizedEvent as any).sequence = sequence;
     (event as any).sequence = sequence;
 
     const prevHash =
-      (event as any).prevHash !== undefined
-        ? (event as any).prevHash
-        : this.getLatestEventHash(event.sessionId);
+      (sanitizedEvent as any).prevHash !== undefined
+        ? (sanitizedEvent as any).prevHash
+        : this.getLatestEventHash(sanitizedEvent.sessionId);
+    (sanitizedEvent as any).prevHash = prevHash;
     (event as any).prevHash = prevHash;
 
     const hash =
-      (event as any).hash || computeEventHash(event as any, prevHash);
+      (sanitizedEvent as any).hash ||
+      computeEventHash(sanitizedEvent as any, prevHash);
+    (sanitizedEvent as any).hash = hash;
     (event as any).hash = hash;
 
     stmt.run({
-      id: event.id,
-      sessionId: event.sessionId,
+      id: sanitizedEvent.id,
+      sessionId: sanitizedEvent.sessionId,
       sequence,
-      type: event.type,
-      timestamp: event.timestamp,
+      type: sanitizedEvent.type,
+      timestamp: sanitizedEvent.timestamp,
       actionId,
       actionKind,
-      payloadJson: JSON.stringify(event),
+      payloadJson: JSON.stringify(sanitizedEvent),
       riskLevel,
       riskScore,
       riskFlagsJson,

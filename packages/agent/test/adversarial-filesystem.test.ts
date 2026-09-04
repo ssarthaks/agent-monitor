@@ -28,7 +28,10 @@ describe("Adversarial Filesystem Security Tests", () => {
 
   describe("Null Byte Injections", () => {
     it("rejects raw null byte injection in file paths", () => {
-      const res = resolveSafeWorkspacePath("safe.txt\0/../../etc/passwd", tmpDir);
+      const res = resolveSafeWorkspacePath(
+        "safe.txt\0/../../etc/passwd",
+        tmpDir,
+      );
       expect(res.isOutsideWorkspace).toBe(true);
       expect(res.reason).toContain("null byte");
     });
@@ -47,20 +50,23 @@ describe("Adversarial Filesystem Security Tests", () => {
 
     it("blocks file operations containing null bytes via readFileTool", async () => {
       await expect(
-        readFileTool.execute({ path: "test\0.txt" }, ctx)
+        readFileTool.execute({ path: "test\0.txt" }, ctx),
       ).rejects.toThrow(/Security Violation/);
     });
 
     it("blocks file operations containing null bytes via writeFileTool", async () => {
       await expect(
-        writeFileTool.execute({ path: "test\0.txt", content: "evil" }, ctx)
+        writeFileTool.execute({ path: "test\0.txt", content: "evil" }, ctx),
       ).rejects.toThrow(/Security Violation/);
     });
   });
 
   describe("Windows Drive Letters and UNC Paths on POSIX", () => {
     it("rejects Windows drive letters when workspace is not on that drive", () => {
-      const res1 = resolveSafeWorkspacePath("C:\\Windows\\System32\\cmd.exe", tmpDir);
+      const res1 = resolveSafeWorkspacePath(
+        "C:\\Windows\\System32\\cmd.exe",
+        tmpDir,
+      );
       expect(res1.isOutsideWorkspace).toBe(true);
 
       const res2 = resolveSafeWorkspacePath("D:/data/secrets.env", tmpDir);
@@ -71,27 +77,42 @@ describe("Adversarial Filesystem Security Tests", () => {
     });
 
     it("rejects UNC network paths", () => {
-      const res1 = resolveSafeWorkspacePath("\\\\attacker-smb\\share\\evil.exe", tmpDir);
+      const res1 = resolveSafeWorkspacePath(
+        "\\\\attacker-smb\\share\\evil.exe",
+        tmpDir,
+      );
       expect(res1.isOutsideWorkspace).toBe(true);
 
-      const res2 = resolveSafeWorkspacePath("//192.168.1.100/c$/secrets.txt", tmpDir);
+      const res2 = resolveSafeWorkspacePath(
+        "//192.168.1.100/c$/secrets.txt",
+        tmpDir,
+      );
       expect(res2.isOutsideWorkspace).toBe(true);
     });
   });
 
   describe("Multi-Layer URL-Encoding Traversal", () => {
     it("blocks single-encoded traversal (%2e%2e%2f)", () => {
-      const res = resolveSafeWorkspacePath("%2e%2e%2f%2e%2e%2fetc%2fpasswd", tmpDir);
+      const res = resolveSafeWorkspacePath(
+        "%2e%2e%2f%2e%2e%2fetc%2fpasswd",
+        tmpDir,
+      );
       expect(res.isOutsideWorkspace).toBe(true);
     });
 
     it("blocks double-encoded traversal (%252e%252e%252f)", () => {
-      const res = resolveSafeWorkspacePath("%252e%252e%252f%252e%252e%252fetc%2fpasswd", tmpDir);
+      const res = resolveSafeWorkspacePath(
+        "%252e%252e%252f%252e%252e%252fetc%2fpasswd",
+        tmpDir,
+      );
       expect(res.isOutsideWorkspace).toBe(true);
     });
 
     it("blocks triple-encoded traversal (%25252e%25252e%25252f)", () => {
-      const res = resolveSafeWorkspacePath("%25252e%25252e%25252f%25252e%25252e%25252fetc%2fpasswd", tmpDir);
+      const res = resolveSafeWorkspacePath(
+        "%25252e%25252e%25252f%25252e%25252e%25252fetc%2fpasswd",
+        tmpDir,
+      );
       expect(res.isOutsideWorkspace).toBe(true);
     });
 
@@ -111,7 +132,9 @@ describe("Adversarial Filesystem Security Tests", () => {
 
       const res = resolveSafeWorkspacePath("symlink_escape/secret.txt", tmpDir);
       expect(res.isOutsideWorkspace).toBe(true);
-      expect(res.reason).toMatch(/Symlink target.*points outside workspace root/);
+      expect(res.reason).toMatch(
+        /Symlink target.*points outside workspace root/,
+      );
     });
 
     it("handles circular symlinks without infinite recursion", () => {
@@ -139,6 +162,75 @@ describe("Adversarial Filesystem Security Tests", () => {
 
       const res = resolveSafeWorkspacePath("symlink_subdir/data.json", tmpDir);
       expect(res.isOutsideWorkspace).toBe(false);
+    });
+  });
+
+  describe("URI Scheme Attacks & Boundary Containment", () => {
+    it("rejects file:///etc/passwd file URIs", () => {
+      const res = resolveSafeWorkspacePath("file:///etc/passwd", tmpDir);
+      expect(res.isOutsideWorkspace).toBe(true);
+      expect(res.safePath).toBe("/etc/passwd");
+    });
+
+    it("rejects file://localhost/etc/passwd file URIs", () => {
+      const res = resolveSafeWorkspacePath(
+        "file://localhost/etc/passwd",
+        tmpDir,
+      );
+      expect(res.isOutsideWorkspace).toBe(true);
+      expect(res.safePath).toBe("/etc/passwd");
+    });
+
+    it("rejects non-localhost and remote file URIs", () => {
+      const res1 = resolveSafeWorkspacePath(
+        "file://127.0.0.1/etc/passwd",
+        tmpDir,
+      );
+      expect(res1.isOutsideWorkspace).toBe(true);
+
+      const res2 = resolveSafeWorkspacePath("file://[::1]/etc/passwd", tmpDir);
+      expect(res2.isOutsideWorkspace).toBe(true);
+    });
+
+    it("rejects external non-file URI schemes (s3://, http://, https://)", () => {
+      const resS3 = resolveSafeWorkspacePath(
+        "s3://my-corp-bucket/secrets.env",
+        tmpDir,
+      );
+      expect(resS3.isOutsideWorkspace).toBe(true);
+      expect(resS3.reason).toContain("External non-file URI scheme");
+
+      const resHttp = resolveSafeWorkspacePath(
+        "http://169.254.169.254/latest/meta-data",
+        tmpDir,
+      );
+      expect(resHttp.isOutsideWorkspace).toBe(true);
+      expect(resHttp.reason).toContain("External non-file URI scheme");
+    });
+
+    it("blocks URI attacks at real execution boundary via readFileTool", async () => {
+      await expect(
+        readFileTool.execute({ path: "file:///etc/passwd" }, ctx),
+      ).rejects.toThrow(/outside workspace root/);
+    });
+
+    it("blocks URI attacks at real execution boundary via writeFileTool", async () => {
+      await expect(
+        writeFileTool.execute(
+          { path: "file:///etc/cron.d/evil", content: "* * * * *" },
+          ctx,
+        ),
+      ).rejects.toThrow(/outside workspace root/);
+    });
+
+    it("allows valid file:// URIs located strictly within workspace", () => {
+      const insidePath = path.join(tmpDir, "local-file.txt");
+      fs.writeFileSync(insidePath, "local content");
+
+      const fileUri = `file://${insidePath}`;
+      const res = resolveSafeWorkspacePath(fileUri, tmpDir);
+      expect(res.isOutsideWorkspace).toBe(false);
+      expect(res.safePath).toBe(insidePath);
     });
   });
 });

@@ -26,9 +26,11 @@ export class PolicyEngine {
   }>;
   private defaultDecision: PolicyDecision;
   private timeoutMs: number;
+  private version: number = 1;
 
   constructor(config?: PolicyConfig) {
     this.config = config || {};
+    this.version = (this.config as any).version || 1;
     this.defaultDecision = this.config.policy?.default || "ALLOW";
     this.timeoutMs =
       this.config.approval?.timeoutMs ||
