@@ -63,7 +63,16 @@ export function resolveSafeWorkspacePath(
       ? cleanPath
       : targetPath;
     try {
-      cleanPath = fileURLToPath(uriCandidate);
+      const parsedUrl = new URL(uriCandidate);
+      const host = parsedUrl.hostname;
+      if (host && host !== "localhost" && host !== "") {
+        return {
+          safePath: targetPath,
+          isOutsideWorkspace: true,
+          reason: `Remote file URI host '${host}' is outside workspace root: '${targetPath}'`,
+        };
+      }
+      cleanPath = fileURLToPath(parsedUrl);
     } catch {
       return {
         safePath: targetPath,

@@ -23,23 +23,24 @@ Agent Monitor is architected as a **local-first, production control plane, unive
 │   ActionInterceptor (@agent-monitor/agent) OR                          │
 │   McpStdioProxy     (@agent-monitor/gateway)                           │
 │                                                                        │
-│   1. Authoritative Pre-Kill Switch Circuit Breaker (SQLite WAL)        │
-│   2. Sticky MCP Source Quarantine Check (SQLite-Backed)                │
-│   3. Sliding-Window Rate Limiter & Flood Prevention                    │
-│   4. Action Normalization & RFC 8089 URI Canonicalization              │
-│   5. Workspace Boundary Containment & Symlink Validation               │
-│   6. Tool Schema Fingerprinting (SHA-256 Rug-Pull Detection)           │
-│   7. Behavioral Sequence Engine V2 (Multi-Step Attack Correlation)     │
-│   8. Deterministic Risk Scoring (0–100 CWE Heuristics)                 │
-│   9. Versioned Additive Policy Evaluation (ALLOW / DENY / ASK)         │
+│   1. Ingress Request Framing & Payload Bounds (10MB / 1MB)             │
+│   2. Authoritative Kill Switch Circuit Breaker (SQLite WAL)            │
+│   3. Sticky MCP Source Quarantine Check (SQLite-Backed)                │
+│   4. Sliding-Window Rate Limiter & Flood Prevention                    │
+│   5. Action Normalization & RFC 8089 URI Canonicalization              │
+│   6. Workspace Boundary Containment & Symlink Validation               │
+│   7. Tool Schema Fingerprinting (SHA-256 Rug-Pull Detection)           │
+│   8. Risk Assessment & Behavioral Sequence Matching V2                 │
+│   9. Versioned Additive Policy Evaluation (DENY > ASK > ALLOW)         │
 │  10. Human-in-the-Loop Approvals (Terminal & Web UI)                   │
 │  11. Post-Approval Comprehensive Revalidation                          │
 │      - Action Context Hash Match                                       │
 │      - Approval Expiration Verification                                │
 │      - Active Policy Version Match                                     │
 │      - Secondary Kill Switch & Quarantine Check                        │
-│  12. Downstream Execution with Bounded Timeouts (30s default)          │
-│  13. Deep Result Inspection & Secret Redaction (500KB cap)             │
+│  12. Controlled Downstream Execution (30s Bounded Timeouts)            │
+│  13. Result Inspection & Deep Secret Redaction (500KB Cap)             │
+│  14. SQLite WAL Persistence with SHA-256 Hash Chaining & Escalation    │
 └───────────────────────────────────┬────────────────────────────────────┘
                                     │ Authoritative Chained Events
                                     ▼

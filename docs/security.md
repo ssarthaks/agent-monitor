@@ -9,37 +9,37 @@ Agent Monitor provides a **deterministic control plane, pre-execution risk analy
 For every agent action or tool call that can cause filesystem, process, network, or external side effects:
 
 ```text
-REQUEST
-  ↓
-1. KILL SWITCH (Authoritative SQLite WAL Check)
-  ↓
-2. SOURCE QUARANTINE (Sticky SQLite Containment)
-  ↓
-3. RATE LIMITING (Sliding Window Flood Prevention)
-  ↓
-4. ACTION NORMALIZATION (RFC 8089 URI Canonicalization)
-  ↓
-5. WORKSPACE / GUARDRAIL VALIDATION (Unicode NFC, Null-Byte, Symlink, Drive/UNC)
-  ↓
-6. RISK ASSESSMENT & SCHEMA MUTATION CHECK (0–100 CWE Heuristics)
-  ↓
-7. DETERMINISTIC POLICY EVALUATION (Additive Specificity)
-  ↓
-8. HUMAN APPROVAL IF ASK (Terminal / Web UI)
-  ↓
-9. POST-APPROVAL COMPREHENSIVE REVALIDATION
-   - Action Context Hash Match (Tamper / Substitution Resistance)
-   - Approval Expiration Check (Timeout Invalidation)
-   - Active Policy Version Match (No Stale Approvals)
-   - Post-Approval Kill Switch & Quarantine Re-Check
-  ↓
-10. DOWNSTREAM EXECUTION (Bounded Timeouts & Idempotency)
-  ↓
-11. RESULT & EXFILTRATION INSPECTION (Deep Secret Redaction & 500KB Bound)
-  ↓
-12. SQLITE PERSISTENCE WITH SHA-256 HASH CHAINING
-  ↓
-13. AUTOMATIC INCIDENT CREATION & CLIENT DISPATCH
+ 1. INGRESS REQUEST & PAYLOAD BOUNDS (10MB JSON-RPC frame, 1MB arguments)
+   ↓
+ 2. KILL SWITCH (Authoritative SQLite WAL Check)
+   ↓
+ 3. SOURCE QUARANTINE (Sticky SQLite Containment)
+   ↓
+ 4. RATE LIMITING (Sliding Window Flood Prevention)
+   ↓
+ 5. ACTION NORMALIZATION (RFC 8089 URI Canonicalization)
+   ↓
+ 6. WORKSPACE / GUARDRAIL VALIDATION (Unicode NFC, Null-Byte, Symlink, Drive/UNC)
+   ↓
+ 7. RISK ASSESSMENT & SCHEMA MUTATION CHECK (0–100 CWE Heuristics)
+   ↓
+ 8. DETERMINISTIC POLICY EVALUATION (Additive Specificity: DENY > ASK > ALLOW)
+   ↓
+ 9. HUMAN APPROVAL IF ASK (Terminal / Web UI)
+   ↓
+10. POST-APPROVAL COMPREHENSIVE REVALIDATION
+    - Action Context Hash Match (Tamper / Substitution Resistance)
+    - Approval Expiration Check (Timeout Invalidation)
+    - Active Policy Version Match (No Stale Approvals)
+    - Post-Approval Kill Switch & Quarantine Re-Check
+   ↓
+11. CONTROLLED DOWNSTREAM EXECUTION (Bounded Timeouts & Idempotency)
+   ↓
+12. RESULT & EXFILTRATION INSPECTION (Deep Secret Redaction & 500KB Bound)
+   ↓
+13. SQLITE WAL PERSISTENCE WITH SHA-256 HASH CHAINING
+   ↓
+14. AUTOMATIC INCIDENT ESCALATION & DISPATCH
 ```
 
 No tool, MCP call, or resource read can bypass any step in this chain.

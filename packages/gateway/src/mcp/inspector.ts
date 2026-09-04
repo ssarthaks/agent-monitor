@@ -61,6 +61,33 @@ export class McpResultInspector {
         });
         result = { ...result, contents: modifiedContents };
         modified = true;
+      } else {
+        result = {
+          isError: true,
+          content: [
+            {
+              type: "text",
+              text: `[ERROR: Tool result exceeded maximum allowed size of ${MAX_RESULT_BYTES / 1024} KB and could not be safely structured without truncation]`,
+            },
+          ],
+        };
+        modified = true;
+      }
+
+      // If still exceeding 500KB after text truncation, replace with bounded error content
+      if (
+        Buffer.byteLength(JSON.stringify(result), "utf8") > MAX_RESULT_BYTES
+      ) {
+        result = {
+          isError: true,
+          content: [
+            {
+              type: "text",
+              text: `[ERROR: Tool result exceeded maximum allowed size of ${MAX_RESULT_BYTES / 1024} KB]`,
+            },
+          ],
+        };
+        modified = true;
       }
 
       let warning = "Tool result was truncated to prevent memory exhaustion";

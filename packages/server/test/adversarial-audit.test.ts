@@ -195,4 +195,57 @@ describe("Adversarial Audit Integrity & Tamper Resistance Tests", () => {
     const verifyRes = verifyEventChain(allEvents as any);
     expect(verifyRes.verified).toBe(true);
   });
+
+  it("canary test: proves raw secret bytes are physically absent from SQLite, audit hashes, and canonical export", () => {
+    const canaryGithub = "ghp_CANARY9876543210abcdefghijklmnop";
+    const canaryAws = "AKIAIOSFODNN7CANARY1";
+    const canaryOpenAI = "sk-CANARY1234567890abcdef1234567890abcdef";
+
+    const nestedPayload = {
+      a: canaryGithub,
+      nested: {
+        b: [canaryAws, "safe-string"],
+        c: {
+          d: canaryOpenAI,
+          e: `Text containing token: ${canaryGithub}`,
+        },
+      },
+    };
+
+    repo.insertEvent({
+      id: "evt_canary_test",
+      sessionId,
+      agentId: "agent_audit",
+      timestamp: 3000,
+      type: "agent.message",
+      content: `Message containing ${canaryGithub}`,
+      metadata: nestedPayload,
+    } as any);
+
+    // 1. Raw SQLite row check: ensure raw canary bytes never hit the disk
+    const row = db
+      .prepare("SELECT payload_json FROM events WHERE id = ?")
+      .get("evt_canary_test") as any;
+    expect(row).toBeDefined();
+    expect(row.payload_json).not.toContain(canaryGithub);
+    expect(row.payload_json).not.toContain(canaryAws);
+    expect(row.payload_json).not.toContain(canaryOpenAI);
+
+    // 2. Repository retrieval channel check
+    const retrievedEvents = repo.getEventsBySession(sessionId, 0);
+    const serializedRetrieved = JSON.stringify(retrievedEvents);
+    expect(serializedRetrieved).not.toContain(canaryGithub);
+    expect(serializedRetrieved).not.toContain(canaryAws);
+    expect(serializedRetrieved).not.toContain(canaryOpenAI);
+
+    // 3. Export ledger channel check
+    const exportedLedger = exportCanonicalLedger(retrievedEvents as any);
+    expect(exportedLedger).not.toContain(canaryGithub);
+    expect(exportedLedger).not.toContain(canaryAws);
+    expect(exportedLedger).not.toContain(canaryOpenAI);
+
+    // 4. Hash verification passes on sanitized ledger
+    const verifyRes = verifyEventChain(retrievedEvents as any);
+    expect(verifyRes.verified).toBe(true);
+  });
 });

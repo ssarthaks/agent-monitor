@@ -20,7 +20,7 @@ describe("Resource Exhaustion & Payload Hardening Tests", () => {
   beforeEach(() => {
     mockServerPath = path.join(
       process.cwd(),
-      "packages/gateway/test/mock-exhaust-server.cjs"
+      "packages/gateway/test/mock-exhaust-server.cjs",
     );
     const mockServerCode = `
       const readline = require('readline');
@@ -123,7 +123,9 @@ describe("Resource Exhaustion & Payload Hardening Tests", () => {
 
     expect(response.error).toBeDefined();
     expect(response.error.code).toBe(-32602);
-    expect(response.error.message).toMatch(/exceed maximum allowed payload size of 1MB/);
+    expect(response.error.message).toMatch(
+      /exceed maximum allowed payload size of 1MB/,
+    );
 
     await proxy.stop();
   });
@@ -131,16 +133,16 @@ describe("Resource Exhaustion & Payload Hardening Tests", () => {
   it("truncates tool result exceeding 500KB in McpResultInspector", () => {
     const hugeOutput = "A".repeat(600 * 1024); // 600 KB
     const resultObj = {
-      content: [
-        { type: "text", text: hugeOutput },
-      ],
+      content: [{ type: "text", text: hugeOutput }],
     };
 
     const inspected = McpResultInspector.inspect(resultObj);
     expect(inspected.modified).toBe(true);
     expect(inspected.warning).toContain("truncated");
     const textContent = JSON.stringify(inspected.result);
-    expect(textContent).toContain("[WARNING: Agent Monitor truncated output because it exceeded 500 KB limit]");
+    expect(textContent).toContain(
+      "[WARNING: Agent Monitor truncated output because it exceeded 500 KB limit]",
+    );
     expect(textContent.length).toBeLessThan(50 * 1024);
   });
 
@@ -171,5 +173,18 @@ describe("Resource Exhaustion & Payload Hardening Tests", () => {
     parser.write("Content-Length: 104857600\r\n\r\n{}"); // 100MB
     expect(errors.length).toBeGreaterThanOrEqual(1);
     expect(errors[0].message).toMatch(/Invalid JSON-RPC Content-Length/);
+  });
+
+  it("bounds arbitrary oversized JSON result without .content to valid JSON structure <= 500KB", () => {
+    const hugeArbitrary = {
+      nestedData: "X".repeat(600 * 1024),
+    };
+    const inspected = McpResultInspector.inspect(hugeArbitrary);
+    expect(inspected.modified).toBe(true);
+    expect(inspected.result.isError).toBe(true);
+    const serialized = JSON.stringify(inspected.result);
+    expect(Buffer.byteLength(serialized, "utf8")).toBeLessThan(500 * 1024);
+    // Parse to prove valid JSON syntax
+    expect(() => JSON.parse(serialized)).not.toThrow();
   });
 });

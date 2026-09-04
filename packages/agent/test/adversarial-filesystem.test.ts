@@ -232,5 +232,46 @@ describe("Adversarial Filesystem Security Tests", () => {
       expect(res.isOutsideWorkspace).toBe(false);
       expect(res.safePath).toBe(insidePath);
     });
+
+    it("rejects uppercase FILE:///etc/passwd schemes (case-insensitive)", () => {
+      const res = resolveSafeWorkspacePath("FILE:///etc/passwd", tmpDir);
+      expect(res.isOutsideWorkspace).toBe(true);
+      expect(res.safePath).toBe("/etc/passwd");
+    });
+
+    it("rejects remote host file URIs like file://evil.com/etc/passwd", () => {
+      const res = resolveSafeWorkspacePath(
+        "file://evil.com/etc/passwd",
+        tmpDir,
+      );
+      expect(res.isOutsideWorkspace).toBe(true);
+      expect(res.reason).toMatch(
+        /Remote file URI host|Invalid or remote file URI/,
+      );
+    });
+
+    it("rejects percent-encoded file URI schemes (file:%2F%2F%2Fetc%2Fpasswd)", () => {
+      const res = resolveSafeWorkspacePath(
+        "file:%2F%2F%2Fetc%2Fpasswd",
+        tmpDir,
+      );
+      expect(res.isOutsideWorkspace).toBe(true);
+    });
+
+    it("rejects file URIs combined with percent-encoded directory traversal", () => {
+      const res = resolveSafeWorkspacePath(
+        "file:///tmp/%2e%2e/%2e%2e/etc/passwd",
+        tmpDir,
+      );
+      expect(res.isOutsideWorkspace).toBe(true);
+    });
+
+    it("rejects file URIs combined with literal directory traversal", () => {
+      const res = resolveSafeWorkspacePath(
+        "file:///tmp/../../etc/passwd",
+        tmpDir,
+      );
+      expect(res.isOutsideWorkspace).toBe(true);
+    });
   });
 });

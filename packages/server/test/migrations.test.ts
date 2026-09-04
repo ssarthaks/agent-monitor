@@ -1,8 +1,11 @@
 import { describe, it, expect } from "vitest";
+import fs from "node:fs";
+import path from "node:path";
+import os from "node:os";
 import DatabaseConstructor from "better-sqlite3";
 import { MigrationRunner } from "../src/db/migrations/runner.js";
 import { MIGRATIONS } from "../src/db/migrations/definitions.js";
-import { createDatabase } from "../src/db/database.js";
+import { createDatabase, checkDatabaseHealth } from "../src/db/database.js";
 
 describe("Database Migrations (Phase 1)", () => {
   it("applies all migrations in order on a fresh database", () => {
@@ -137,5 +140,28 @@ describe("Database Migrations (Phase 1)", () => {
     expect(policyVersions.count).toBe(0);
 
     db.close();
+  });
+
+  it("fails closed immediately at process startup if SQLite file is corrupted", () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "corrupt-db-test-"));
+    const dbPath = path.join(tmpDir, "corrupted.db");
+
+    // 1. Create a valid SQLite database with all tables
+    const dbValid = createDatabase(dbPath);
+    dbValid.close();
+
+    // 2. Corrupt the database file by overwriting pages with random junk
+    const junk = Buffer.alloc(4096, 0xff);
+    const fd = fs.openSync(dbPath, "r+");
+    fs.writeSync(fd, junk, 0, junk.length, 100);
+    fs.closeSync(fd);
+
+    // 3. Attempt to initialize application via createDatabase()
+    expect(() => createDatabase(dbPath)).toThrow(
+      /FATAL: SQLite database.*check failed|file is not a database|database disk image is malformed/i,
+    );
+
+    // 4. Cleanup
+    fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 });
