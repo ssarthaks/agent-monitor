@@ -122,6 +122,14 @@ export const DEFAULT_POLICY_RULES: PolicyRule[] = [
     decision: "ASK",
     reason: "Attempting privilege escalation (sudo) requires human approval.",
   },
+  {
+    id: "ask-mutated-tools",
+    name: "Require approval for dynamically mutated external tools (rug-pull protection)",
+    action: "*",
+    decision: "ASK",
+    reason:
+      "External tool schema or description was modified at runtime after session discovery (potential tool rug-pull). Operator approval required.",
+  },
 
   // ─────────────────────────────────────────────────────────────
   // 3. ALLOW RULES (Safe In-Workspace Development Operations)

@@ -9,7 +9,7 @@
   ],
   "scripts": {
     "build:web": "npm run build --workspace=@agent-monitor/web && mkdir -p packages/server/public && cp -R apps/web/out/* packages/server/public/",
-    "build": "npx tsc --build packages/core packages/server packages/agent packages/cli",
+    "build": "npx tsc --build packages/core packages/server packages/agent packages/gateway packages/cli",
     "test": "vitest run",
     "dev:web": "npm run dev --workspace=apps/web",
     "cli": "tsx packages/cli/src/index.ts",

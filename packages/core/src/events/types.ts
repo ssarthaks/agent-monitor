@@ -12,7 +12,12 @@ export type EventType =
   | "action.started"
   | "action.completed"
   | "action.failed"
-  | "action.blocked";
+  | "action.blocked"
+  | "tool.discovered"
+  | "tool.changed"
+  | "behavioral.match"
+  | "control.kill_switch_enabled"
+  | "control.kill_switch_disabled";
 
 export interface BaseEvent {
   id: string; // Unique event ID (e.g. "evt_01J...")
@@ -151,6 +156,49 @@ export interface ActionBlockedEvent extends BaseEvent {
   };
 }
 
+export interface ToolDiscoveredEvent extends BaseEvent {
+  type: "tool.discovered";
+  toolName: string;
+  source: string;
+  fingerprint: string;
+  description: string;
+  inputSchema: Record<string, any>;
+}
+
+export interface ToolChangedEvent extends BaseEvent {
+  type: "tool.changed";
+  toolName: string;
+  source: string;
+  previousFingerprint: string;
+  newFingerprint: string;
+  diffSummary: string;
+}
+
+export interface BehavioralMatchEvent extends BaseEvent {
+  type: "behavioral.match";
+  match: {
+    ruleId: string;
+    name: string;
+    severity: "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
+    reason: string;
+    triggeringActionId: string;
+    triggeringActionKind: string;
+    priorActionIds: string[];
+    timestamp: number;
+  };
+}
+
+export interface KillSwitchEnabledEvent extends BaseEvent {
+  type: "control.kill_switch_enabled";
+  activatedBy: string;
+  reason: string;
+}
+
+export interface KillSwitchDisabledEvent extends BaseEvent {
+  type: "control.kill_switch_disabled";
+  resumedBy: string;
+}
+
 export type AgentEvent =
   | SessionStartedEvent
   | SessionEndedEvent
@@ -161,7 +209,12 @@ export type AgentEvent =
   | ActionStartedEvent
   | ActionCompletedEvent
   | ActionFailedEvent
-  | ActionBlockedEvent;
+  | ActionBlockedEvent
+  | ToolDiscoveredEvent
+  | ToolChangedEvent
+  | BehavioralMatchEvent
+  | KillSwitchEnabledEvent
+  | KillSwitchDisabledEvent;
 
 export interface AgentSession {
   id: string;
@@ -173,7 +226,7 @@ export interface AgentSession {
   task: string;
   startedAt: number;
   endedAt?: number | null;
-  status: "running" | "completed" | "failed" | "interrupted";
+  status: "running" | "completed" | "failed" | "interrupted" | "killed";
   riskScore: number;
   summary?: SessionEndedEvent["summary"] | null;
 }

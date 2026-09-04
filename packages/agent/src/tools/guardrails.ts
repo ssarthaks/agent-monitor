@@ -19,10 +19,26 @@ export function resolveSafeWorkspacePath(
   let resolvedTarget = path.isAbsolute(targetPath)
     ? path.resolve(targetPath)
     : path.resolve(normalizedRoot, targetPath);
+  // Iteratively decode URL encodings (e.g. %2e%2e%2f or nested %252e%252e%252f)
+  let cleanPath = targetPath;
+  try {
+    let prev = targetPath;
+    for (let i = 0; i < 5; i++) {
+      const next = decodeURIComponent(prev);
+      if (next === prev) break;
+      prev = next;
+    }
+    cleanPath = prev;
+  } catch {}
 
   // Check containment using path.relative
   const rel = path.relative(normalizedRoot, resolvedTarget);
   const isOutside = rel.startsWith('..') || path.isAbsolute(rel);
+  // Check both raw targetPath and URL-decoded candidate
+  const candidates = [targetPath];
+  if (cleanPath !== targetPath) {
+    candidates.push(cleanPath);
+  }
 
   if (isOutside) {
     return {
@@ -30,7 +46,27 @@ export function resolveSafeWorkspacePath(
       isOutsideWorkspace: true,
       reason: `Path '${targetPath}' resolves outside workspace root '${normalizedRoot}'`,
     };
+  for (const cand of candidates) {
+    const resolvedCand = path.isAbsolute(cand)
+      ? path.resolve(cand)
+      : path.resolve(normalizedRoot, cand);
+
+    const rel = path.relative(normalizedRoot, resolvedCand);
+    const isOutside = rel.startsWith('..') || path.isAbsolute(rel);
+
+    if (isOutside) {
+      return {
+        safePath: resolvedCand,
+        isOutsideWorkspace: true,
+        reason: `Path '${targetPath}' resolves outside workspace root '${normalizedRoot}'`,
+      };
+    }
   }
+
+  // Use the decoded candidate for resolvedTarget path
+  const resolvedTarget = path.isAbsolute(cleanPath)
+    ? path.resolve(cleanPath)
+    : path.resolve(normalizedRoot, cleanPath);
 
   // Check symlinks only if workspaceRoot exists on physical filesystem
   if (fs.existsSync(normalizedRoot)) {

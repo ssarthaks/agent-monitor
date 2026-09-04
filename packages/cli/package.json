@@ -27,6 +27,7 @@
   "dependencies": {
     "@agent-monitor/agent": "^0.2.1",
     "@agent-monitor/core": "^0.2.1",
+    "@agent-monitor/gateway": "^0.2.1",
     "@agent-monitor/server": "^0.2.1",
     "commander": "^12.1.0",
     "picocolors": "^1.1.1"

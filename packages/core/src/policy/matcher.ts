@@ -35,6 +35,8 @@ export function calculateRuleSpecificity(rule: PolicyRule): number {
   // 2. Path Dimension
   if (rule.id === "deny-outside-workspace") {
     score += 50; // Workspace boundary rule
+  } else if (rule.id === "ask-mutated-tools") {
+    score += 45; // Dynamic tool rug-pull protection rule
   } else if (rule.path) {
     if (!rule.path.includes("*") && !rule.path.includes("?")) {
       score += 50; // Exact path match
@@ -68,6 +70,9 @@ export function calculateRuleSpecificity(rule: PolicyRule): number {
   // 4. Context Dimension
   if (rule.agentId) score += 10;
   if (rule.maxRiskScore !== undefined) score += 10;
+  if (rule.when?.priorSensitiveRead) score += 15;
+  if (rule.when?.priorWorkspaceWrite) score += 10;
+  if (rule.when?.source) score += 10;
 
   return score;
 }
@@ -185,6 +190,43 @@ export function matchPath(
 }
 
 /**
+ * Normalizes a shell command string by stripping common execution wrappers
+ * (sudo, doas, env, sh -c, bash -c) and standardizing whitespace and rm flag permutations.
+ */
+export function normalizeCommand(cmd: string): string {
+  let current = cmd.trim();
+  // Unwrap execution prefixes iteratively
+  while (true) {
+    const sudoMatch = current.match(
+      /^(?:sudo|doas|env(?:\s+-[a-zA-Z0-9_-]+)*)\s+(.*)$/i,
+    );
+    if (sudoMatch) {
+      current = sudoMatch[1].trim();
+      continue;
+    }
+    const shellMatch = current.match(
+      /^(?:(?:ba|z)?sh|dash)\s+-c\s+["'](.*?)["']$/i,
+    );
+    if (shellMatch) {
+      current = shellMatch[1].trim();
+      continue;
+    }
+    break;
+  }
+
+  // Collapse multiple whitespace
+  current = current.replace(/\s+/g, " ");
+
+  // Standardize rm flags (e.g. rm -fr, rm -r -f, rm -f -r -> rm -rf)
+  current = current.replace(
+    /\brm\s+(?:-[a-zA-Z]*r[a-zA-Z]*f\b|-[a-zA-Z]*f[a-zA-Z]*r\b|-r\s+-f|-f\s+-r)\b/i,
+    "rm -rf",
+  );
+
+  return current;
+}
+
+/**
  * Matches a shell command string against a command pattern (e.g. 'git push origin main' matches 'git push *').
  */
 export function matchCommand(
@@ -196,9 +238,12 @@ export function matchCommand(
 
   const trimmedPattern = pattern.trim();
   const trimmedCommand = command.trim();
+  const trimmedPattern = pattern.trim().replace(/\s+/g, " ");
+  const normalizedCommand = normalizeCommand(command);
 
   // Exact match
   if (trimmedPattern === trimmedCommand) return true;
+  if (trimmedPattern === normalizedCommand) return true;
 
   // Command prefix glob (e.g. 'git push *' or 'git *')
   if (trimmedPattern.endsWith("*")) {
@@ -207,6 +252,9 @@ export function matchCommand(
       trimmedCommand === prefix ||
       trimmedCommand.startsWith(`${prefix} `) ||
       trimmedCommand.startsWith(prefix)
+      normalizedCommand === prefix ||
+      normalizedCommand.startsWith(`${prefix} `) ||
+      normalizedCommand.startsWith(prefix)
     ) {
       return true;
     }
@@ -222,6 +270,7 @@ export function matchCommand(
     "$";
 
   return new RegExp(regexStr, "i").test(trimmedCommand);
+  return new RegExp(regexStr, "i").test(normalizedCommand);
 }
 
 /**
@@ -237,9 +286,27 @@ export function matchesRule(
     return false;
   }
 
+  // Authoritative Containment: If target is outside workspace, deny-outside-workspace ALWAYS matches
+  if (rule.id === "deny-outside-workspace" && context.isOutsideWorkspace) {
+    return true;
+  }
+
+  // Authoritative Rug-Pull Protection: ask-mutated-tools matches if tool schema was dynamically mutated
+  if (rule.id === "ask-mutated-tools") {
+    return Boolean(context.isToolMutated);
+  }
+
   // 1. Action Kind Match
   if (!matchActionKind(rule.action, String(action.kind))) {
     return false;
+  const kindStr = String(action.kind);
+  if (!matchActionKind(rule.action, kindStr)) {
+    // If rule matches file.* and action category is file, allow match
+    if (rule.action === "file.*" && action.category === "file") {
+      // match accepted
+    } else {
+      return false;
+    }
   }
 
   // 2. Agent ID Match (if specified in rule)
@@ -275,6 +342,27 @@ export function matchesRule(
   if (rule.maxRiskScore !== undefined && action.risk) {
     if (action.risk.score > rule.maxRiskScore && rule.decision === "ALLOW") {
       return false; // Exceeds allowed risk
+    }
+  }
+
+  // 7. Behavioral & Sequence Context (when conditions)
+  if (rule.when) {
+    if (rule.when.priorSensitiveRead && !context.hasPriorSensitiveRead) {
+      return false;
+    }
+    if (rule.when.priorWorkspaceWrite && !context.hasPriorWorkspaceWrite) {
+      return false;
+    }
+    if (rule.when.source) {
+      const actualSource =
+        context.source || (action.source?.type ? `${action.source.type}` : "");
+      if (
+        rule.when.source !== "*" &&
+        actualSource !== rule.when.source &&
+        !actualSource.startsWith(`${rule.when.source}:`)
+      ) {
+        return false;
+      }
     }
   }
 

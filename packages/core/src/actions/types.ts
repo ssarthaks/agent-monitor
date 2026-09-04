@@ -1,12 +1,29 @@
-export type ActionCategory = 'file' | 'process' | 'network' | 'system' | 'custom';
+export type ActionCategory =
+  | "file"
+  | "process"
+  | "network"
+  | "system"
+  | "custom";
+
+export type ActionSourceType = "runtime" | "mcp" | "hook" | "sdk" | "unknown";
+
+export interface ActionSource {
+  type: ActionSourceType;
+  server?: string;
+  transport?: "stdio" | "http" | "in-process" | string;
+  runtime?: string;
+  client?: string;
+  toolName?: string;
+  metadata?: Record<string, any>;
+}
 
 export type ActionKind =
-  | 'file.read'
-  | 'file.write'
-  | 'file.list'
-  | 'file.delete'
-  | 'process.exec'
-  | 'network.request'
+  | "file.read"
+  | "file.write"
+  | "file.list"
+  | "file.delete"
+  | "process.exec"
+  | "network.request"
   | string;
 
 export interface FileReadParams {
@@ -46,7 +63,7 @@ export interface FileListResult {
   entries: Array<{
     name: string;
     path: string;
-    type: 'file' | 'directory';
+    type: "file" | "directory";
     size?: number;
   }>;
   totalCount: number;

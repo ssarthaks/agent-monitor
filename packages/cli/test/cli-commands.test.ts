@@ -67,4 +67,112 @@ describe("CLI Commands & Configuration Bootstrap", () => {
     const content = JSON.parse(fs.readFileSync(configPath, "utf8"));
     expect(content.policy.default).toBe("ALLOW");
   });
+
+  it("kill and resume commands toggle kill switch in SQLite database", async () => {
+    const { runKillCommand, runResumeCommand } =
+      await import("../src/commands/kill.js");
+    const { createDatabase, SessionRepository } =
+      await import("@agent-monitor/server");
+
+    const dbPath = path.join(tmpDir, "data.db");
+    const db = createDatabase(dbPath);
+    const repo = new SessionRepository(db);
+
+    repo.createSession({
+      id: "ses_cli_kill_test",
+      agentId: "agent-1",
+      agentName: "Agent 1",
+      provider: "deepseek",
+      model: "deepseek-chat",
+      workspaceRoot: tmpDir,
+      task: "Test Kill Command",
+      startedAt: Date.now(),
+      status: "running",
+      riskScore: 0,
+    });
+    db.close();
+
+    // 1. Activate kill switch via CLI
+    await runKillCommand({
+      session: "ses_cli_kill_test",
+      db: dbPath,
+      reason: "Emergency kill test",
+    });
+
+    const dbCheck1 = createDatabase(dbPath);
+    const repoCheck1 = new SessionRepository(dbCheck1);
+    expect(repoCheck1.isKillSwitchActive("ses_cli_kill_test")).toBe(true);
+    dbCheck1.close();
+
+    // 2. Resume session via CLI
+    await runResumeCommand({
+      session: "ses_cli_kill_test",
+      db: dbPath,
+    });
+
+    const dbCheck2 = createDatabase(dbPath);
+    const repoCheck2 = new SessionRepository(dbCheck2);
+    expect(repoCheck2.isKillSwitchActive("ses_cli_kill_test")).toBe(false);
+    dbCheck2.close();
+  });
+
+  it("tools and security flows commands execute cleanly without error", async () => {
+    const { runToolsCommand } = await import("../src/commands/tools.js");
+    const { runSecurityFlowsCommand } =
+      await import("../src/commands/security.js");
+    const { createDatabase, SessionRepository } =
+      await import("@agent-monitor/server");
+
+    const dbPath = path.join(tmpDir, "data.db");
+    const db = createDatabase(dbPath);
+    const repo = new SessionRepository(db);
+
+    repo.createSession({
+      id: "ses_cli_tools_test",
+      agentId: "agent-2",
+      agentName: "Agent 2",
+      provider: "mcp",
+      model: "external",
+      workspaceRoot: tmpDir,
+      task: "Test Tools Command",
+      startedAt: Date.now(),
+      status: "running",
+      riskScore: 0,
+    });
+
+    repo.recordToolFingerprint({
+      id: "tf_1",
+      sessionId: "ses_cli_tools_test",
+      toolName: "list_files",
+      source: "mcp:fs",
+      fingerprint: "abc12345",
+      schemaJson: "{}",
+      description: "List directory files",
+      firstSeenAt: Date.now(),
+      lastSeenAt: Date.now(),
+    });
+
+    repo.recordBehavioralMatch({
+      id: "bm_1",
+      sessionId: "ses_cli_tools_test",
+      ruleId: "SEC_SENSITIVE_TO_NETWORK",
+      name: "Sensitive File Exfiltration",
+      severity: "CRITICAL",
+      reason: "Read .env followed by network call",
+      triggeringActionId: "act_2",
+      priorActionIds: ["act_1"],
+      createdAt: Date.now(),
+    });
+
+    db.close();
+
+    // Should execute cleanly without throwing
+    await expect(
+      runToolsCommand({ session: "ses_cli_tools_test", db: dbPath }),
+    ).resolves.not.toThrow();
+
+    await expect(
+      runSecurityFlowsCommand({ session: "ses_cli_tools_test", db: dbPath }),
+    ).resolves.not.toThrow();
+  });
 });

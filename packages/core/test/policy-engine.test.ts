@@ -231,4 +231,66 @@ describe('PolicyEngine — Deterministic Policy Engine (Phase A & Fixes)', () =>
     expect(invalid.valid).toBe(false);
     expect(invalid.errors.length).toBeGreaterThanOrEqual(3);
   });
+
+  it('ADVERSARIAL (VULN-05): blocks rm flag permutations and shell execution wrappers from bypassing policy', () => {
+    const engine = new PolicyEngine(); // uses DEFAULT_POLICY_RULES
+    const ctx = { workspaceRoot: '/app' };
+
+    // 1. rm -fr / (flag permutation)
+    const res1 = engine.evaluate(
+      { kind: 'process.exec', params: { command: 'rm -fr /' } },
+      ctx
+    );
+    expect(res1.decision).toBe('DENY');
+    expect(res1.matchedPolicies).toContain('deny-destructive-rm-root');
+
+    // 2. rm -r -f /
+    const res2 = engine.evaluate(
+      { kind: 'process.exec', params: { command: 'rm -r -f /' } },
+      ctx
+    );
+    expect(res2.decision).toBe('DENY');
+
+    // 3. sudo rm -rf / (privilege wrapper)
+    const res3 = engine.evaluate(
+      { kind: 'process.exec', params: { command: 'sudo rm -rf /' } },
+      ctx
+    );
+    expect(res3.decision).toBe('DENY');
+
+    // 4. sh -c "rm -rf /" (shell execution wrapper)
+    const res4 = engine.evaluate(
+      { kind: 'process.exec', params: { command: 'sh -c "rm -rf /"' } },
+      ctx
+    );
+    expect(res4.decision).toBe('DENY');
+
+    // 5. sudo git push origin main (wrapper on ASK rule)
+    const res5 = engine.evaluate(
+      { kind: 'process.exec', params: { command: 'sudo git push origin main' } },
+      ctx
+    );
+    expect(res5.decision).toBe('ASK');
+    expect(res5.matchedPolicies).toContain('ask-git-push');
+  });
+
+  it('ADVERSARIAL (VULN-03): authoritative containment blocks custom or unmapped file tools outside workspace', () => {
+    const engine = new PolicyEngine(); // uses DEFAULT_POLICY_RULES
+
+    // 1. Custom tool categorized as file with outside workspace path
+    const resCustom = engine.evaluate(
+      { kind: 'file.custom.view_file', category: 'file', params: { path: '/etc/passwd' } },
+      { workspaceRoot: '/app', isOutsideWorkspace: true }
+    );
+    expect(resCustom.decision).toBe('DENY');
+    expect(resCustom.matchedPolicies).toContain('deny-outside-workspace');
+
+    // 2. Completely unmapped custom tool with outside workspace path
+    const resUnmapped = engine.evaluate(
+      { kind: 'custom.mcp.some_reader', category: 'custom', params: { path: '../../shadow' } },
+      { workspaceRoot: '/app', isOutsideWorkspace: true }
+    );
+    expect(resUnmapped.decision).toBe('DENY');
+    expect(resUnmapped.matchedPolicies).toContain('deny-outside-workspace');
+  });
 });

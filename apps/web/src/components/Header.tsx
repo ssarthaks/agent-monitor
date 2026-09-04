@@ -23,6 +23,8 @@ interface HeaderProps {
   selectedSessionId: string | null;
   onSelectSession: (id: string) => void;
   events?: AgentEvent[];
+  onKill?: () => void;
+  onResume?: () => void;
 }
 
 export function Header({
@@ -32,6 +34,8 @@ export function Header({
   selectedSessionId,
   onSelectSession,
   events = [],
+  onKill,
+  onResume,
 }: HeaderProps) {
   const [copied, setCopied] = useState(false);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
@@ -153,6 +157,14 @@ export function Header({
         </span>
       );
     }
+    if (session.status === "killed") {
+      return (
+        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-bold bg-rose-700 text-white uppercase tracking-wider">
+          <span className="w-1.5 h-1.5 rounded-full bg-rose-300"></span>
+          KILLED
+        </span>
+      );
+    }
     if (session.status === "completed") {
       return (
         <span className="px-2.5 py-1 rounded text-xs font-bold bg-ink text-white uppercase tracking-wider">
@@ -191,7 +203,7 @@ export function Header({
                   AGENT MONITOR
                 </span>
                 <span className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded bg-alabaster-muted text-ink border border-alabaster-border">
-                  V0.2
+                  V0.3
                 </span>
               </div>
             </div>
@@ -327,6 +339,28 @@ export function Header({
           </div>
 
           {getStatusBadge()}
+
+          {session &&
+            onKill &&
+            onResume &&
+            (session.status === "killed" ? (
+              <button
+                onClick={onResume}
+                className="flex items-center gap-1 px-2.5 py-1 rounded text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white transition-colors uppercase tracking-wider"
+                title="Resume session execution"
+              >
+                ▶ Resume
+              </button>
+            ) : session.status === "running" ? (
+              <button
+                onClick={onKill}
+                className="flex items-center gap-1 px-2.5 py-1 rounded text-xs font-bold bg-rose-600 hover:bg-rose-700 text-white transition-colors uppercase tracking-wider shadow-sm"
+                title="Emergency kill switch: immediately stop all agent actions"
+              >
+                🛑 Kill Agent
+              </button>
+            ) : null)}
+
           {getRiskBadge()}
 
           <div

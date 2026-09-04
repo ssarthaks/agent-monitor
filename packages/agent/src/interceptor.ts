@@ -16,6 +16,7 @@ import {
   PolicyEngine,
   ApprovalRequest,
   TokenUsage,
+  BehavioralEngine,
 } from "@agent-monitor/core";
 import { ToolDefinition, ToolExecutionContext } from "./runtime.js";
 import { resolveSafeWorkspacePath } from "./tools/guardrails.js";
@@ -30,6 +31,8 @@ export interface InterceptorOptions {
   riskAnalyzer?: RiskAnalyzer;
   policyEngine?: PolicyEngine;
   approvalManager?: ApprovalManager;
+  behavioralEngine?: BehavioralEngine;
+  isKillSwitchActive?: (sessionId: string) => boolean;
 }
 
 export class ActionInterceptor {
@@ -37,6 +40,8 @@ export class ActionInterceptor {
   private riskAnalyzer: RiskAnalyzer;
   private policyEngine: PolicyEngine;
   private approvalManager?: ApprovalManager;
+  private behavioralEngine?: BehavioralEngine;
+  private isKillSwitchActive?: (sessionId: string) => boolean;
   private sink: EventSink;
 
   constructor(
@@ -44,17 +49,21 @@ export class ActionInterceptor {
     riskAnalyzer: RiskAnalyzer = new RiskAnalyzer(),
     policyEngine: PolicyEngine = new PolicyEngine(),
     approvalManager?: ApprovalManager,
+    behavioralEngine?: BehavioralEngine,
   ) {
     if ("sink" in sinkOrOptions) {
       this.sink = sinkOrOptions.sink;
       this.riskAnalyzer = sinkOrOptions.riskAnalyzer || new RiskAnalyzer();
       this.policyEngine = sinkOrOptions.policyEngine || new PolicyEngine();
       this.approvalManager = sinkOrOptions.approvalManager;
+      this.behavioralEngine = sinkOrOptions.behavioralEngine;
+      this.isKillSwitchActive = sinkOrOptions.isKillSwitchActive;
     } else {
       this.sink = sinkOrOptions;
       this.riskAnalyzer = riskAnalyzer;
       this.policyEngine = policyEngine;
       this.approvalManager = approvalManager;
+      this.behavioralEngine = behavioralEngine;
     }
   }
 
@@ -135,6 +144,70 @@ export class ActionInterceptor {
     const actionId = this.generateId("act");
     const startTime = Date.now();
 
+    // 0. Kill Switch Check (Authoritative Local Circuit Breaker)
+    if (this.isKillSwitchActive && this.isKillSwitchActive(ctx.sessionId)) {
+      const blockedEvent: ActionBlockedEvent = {
+        id: this.generateId("evt"),
+        sequence: 0,
+        sessionId: ctx.sessionId,
+        agentId: ctx.agentId,
+        timestamp: Date.now(),
+        type: "action.blocked",
+        actionId,
+        kind: tool.actionKind,
+        category: tool.category,
+        params: rawParams,
+        reason: "Execution blocked: Session was killed by operator kill switch",
+        risk: {
+          level: "CRITICAL",
+          score: 100,
+          flags: [
+            {
+              ruleId: "KILL_SWITCH_ACTIVE",
+              description: "Session killed by operator kill switch",
+              severity: "CRITICAL",
+              scoreImpact: 100,
+            },
+          ],
+        },
+        policy: {
+          decision: "DENY",
+          matchedPolicies: ["authoritative-kill-switch"],
+          reason: "Session killed by operator",
+        },
+      };
+      await this.sink.emit(blockedEvent);
+      throw new Error("Action execution blocked by operator kill switch");
+    }
+
+    // 0.1 Behavioral Engine Evaluation
+    let hasPriorSensitiveRead = false;
+    let hasPriorWorkspaceWrite = false;
+    if (this.behavioralEngine) {
+      const bCtx = this.behavioralEngine.getContext(ctx.sessionId);
+      hasPriorSensitiveRead = bCtx.sensitiveReads.length > 0;
+      hasPriorWorkspaceWrite = bCtx.workspaceWrites.length > 0;
+
+      const bMatches = this.behavioralEngine.evaluate(ctx.sessionId, {
+        actionId,
+        kind: tool.actionKind,
+        category: tool.category,
+        params: rawParams,
+      });
+
+      for (const match of bMatches) {
+        await this.sink.emit({
+          id: this.generateId("evt"),
+          sequence: 0,
+          sessionId: ctx.sessionId,
+          agentId: ctx.agentId,
+          timestamp: Date.now(),
+          type: "behavioral.match",
+          match,
+        } as any);
+      }
+    }
+
     // 1. Guardrails: Check Workspace Boundary
     let isOutsideWorkspace = false;
     if (rawParams.path) {
@@ -162,6 +235,8 @@ export class ActionInterceptor {
         workspaceRoot: ctx.workspaceRoot,
         agentId: ctx.agentId,
         isOutsideWorkspace,
+        hasPriorSensitiveRead,
+        hasPriorWorkspaceWrite,
       },
     );
 
@@ -351,6 +426,15 @@ export class ActionInterceptor {
         metadata,
       };
       await this.sink.emit(completedEvent);
+
+      if (this.behavioralEngine) {
+        this.behavioralEngine.recordAction(ctx.sessionId, {
+          actionId,
+          kind: tool.actionKind,
+          category: tool.category,
+          params: rawParams,
+        });
+      }
 
       return result;
     } catch (err: any) {

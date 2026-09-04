@@ -42,6 +42,8 @@ function DashboardContent() {
     isConnected,
     error,
     allSessions,
+    killSession,
+    resumeSession,
   } = useSessionStream(selectedSessionId);
 
   useEffect(() => {
@@ -76,6 +78,8 @@ function DashboardContent() {
           setSelectedAction(null);
         }}
         events={events}
+        onKill={killSession}
+        onResume={resumeSession}
       />
 
       {error && (

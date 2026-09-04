@@ -19,4 +19,9 @@ export interface RiskRule {
   severity: RiskLevel;
   scoreImpact: number;
   matches: (kind: string, params: Record<string, any>, context?: { isOutsideWorkspace?: boolean }) => boolean;
+  matches: (
+    kind: string,
+    params: Record<string, any>,
+    context?: { isOutsideWorkspace?: boolean; isToolMutated?: boolean }
+  ) => boolean;
 }

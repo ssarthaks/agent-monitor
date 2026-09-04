@@ -1,7 +1,13 @@
-import { ActionCategory, ActionKind } from '../actions/types.js';
-import { RiskAssessment } from '../risk/types.js';
+import { ActionCategory, ActionKind } from "../actions/types.js";
+import { RiskAssessment } from "../risk/types.js";
 
-export type PolicyDecision = 'ALLOW' | 'DENY' | 'ASK';
+export type PolicyDecision = "ALLOW" | "DENY" | "ASK";
+
+export interface PolicyRuleWhen {
+  priorSensitiveRead?: boolean;
+  priorWorkspaceWrite?: boolean;
+  source?: string; // e.g. "mcp", "runtime", "mcp:filesystem"
+}
 
 export interface PolicyRule {
   id: string;
@@ -13,6 +19,7 @@ export interface PolicyRule {
   reason?: string;
   agentId?: string;
   maxRiskScore?: number;
+  when?: PolicyRuleWhen;
 }
 
 export interface PolicyConfig {
@@ -38,6 +45,10 @@ export interface PolicyActionContext {
   workspaceRoot: string;
   agentId?: string;
   isOutsideWorkspace?: boolean;
+  isToolMutated?: boolean;
+  hasPriorSensitiveRead?: boolean;
+  hasPriorWorkspaceWrite?: boolean;
+  source?: string;
 }
 
 export interface EvaluatedAction {
@@ -45,4 +56,5 @@ export interface EvaluatedAction {
   category?: ActionCategory | string;
   params: Record<string, any>;
   risk?: RiskAssessment;
+  source?: any;
 }

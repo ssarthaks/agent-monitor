@@ -95,6 +95,24 @@ describe('Agent Tools & Security Guardrails', () => {
     ).rejects.toThrow(/Security Violation/);
   });
 
+  it('ADVERSARIAL: blocks URL-encoded and double-encoded path traversal attempts', async () => {
+    // 1. Single URL-encoded %2e%2e%2f
+    const check1 = resolveSafeWorkspacePath('..%2f..%2fetc%2fpasswd', tmpDir);
+    expect(check1.isOutsideWorkspace).toBe(true);
+
+    await expect(
+      readFileTool.execute({ path: '..%2f..%2fetc%2fpasswd' }, ctx)
+    ).rejects.toThrow(/Security Violation/);
+
+    // 2. Nested / double URL-encoded %252e%252e%252f
+    const check2 = resolveSafeWorkspacePath('%252e%252e%252f%252e%252e%252fetc%252fshadow', tmpDir);
+    expect(check2.isOutsideWorkspace).toBe(true);
+
+    await expect(
+      readFileTool.execute({ path: '%252e%252e%252f%252e%252e%252fetc%252fshadow' }, ctx)
+    ).rejects.toThrow(/Security Violation/);
+  });
+
   it('rejects file writes exceeding 2MB limit', async () => {
     const largeContent = 'A'.repeat(2.5 * 1024 * 1024);
     await expect(

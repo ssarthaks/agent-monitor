@@ -12,6 +12,7 @@ export class RiskAnalyzer {
     kind: string,
     params: Record<string, any>,
     context?: { isOutsideWorkspace?: boolean }
+    context?: { isOutsideWorkspace?: boolean; isToolMutated?: boolean }
   ): RiskAssessment {
     const flags: RiskFlag[] = [];
     let totalScore = 0;

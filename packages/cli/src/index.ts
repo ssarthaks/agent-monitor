@@ -9,13 +9,17 @@ import {
 } from "./commands/config.js";
 import { runSessionsCommand } from "./commands/sessions.js";
 import { runStatusCommand } from "./commands/status.js";
+import { runMcpProxyCommand } from "./commands/mcp.js";
+import { runKillCommand, runResumeCommand } from "./commands/kill.js";
+import { runToolsCommand } from "./commands/tools.js";
+import { runSecurityFlowsCommand } from "./commands/security.js";
 
 const program = new Command();
 
 program
   .name("agent-monitor")
   .description(
-    "Agent Monitor — Activity Monitor & Deterministic Policy Gate for AI Agents (V0.2 OBSERVE + CONTROL)",
+    "Agent Monitor — Activity Monitor & Deterministic Policy Gate for AI Agents (V0.3 UNIVERSAL CONTROL BOUNDARY)",
   )
   .version("0.2.1");
 
@@ -228,6 +232,170 @@ program
   .action(async (options) => {
     try {
       await runStatusCommand(options);
+    } catch (err: any) {
+      console.error(`\n❌ Error: ${err.message}`);
+      process.exit(1);
+    }
+  });
+
+// 7. MCP Transparent Proxy Command (`agent-monitor mcp proxy -- <command>`)
+const mcpCmd = program
+  .command("mcp")
+  .description(
+    "Transparent Model Context Protocol (MCP) gateway & security controls",
+  );
+
+mcpCmd
+  .command("proxy")
+  .description(
+    "Wrap an external MCP server process over stdio with deterministic policy enforcement and tool fingerprinting",
+  )
+  .argument(
+    "<command...>",
+    "Downstream command to execute (e.g. npx -y @modelcontextprotocol/server-filesystem /tmp)",
+  )
+  .option("-w, --workspace <path>", "Workspace directory", process.cwd())
+  .option("-s, --session <id>", "Session ID to associate or resume")
+  .option(
+    "--server-name <name>",
+    "Descriptive name for the downstream MCP server",
+  )
+  .option(
+    "-p, --port <port>",
+    "Monitor Server port",
+    (val) => parseInt(val, 10),
+    4040,
+  )
+  .option("--db <path>", "Custom SQLite database file path")
+  .option("-c, --config <path>", "Path to agent-monitor.config.json")
+  .option(
+    "--no-server",
+    "Disable background HTTP/SSE server for this proxy session",
+  )
+  .action(async (command, options) => {
+    try {
+      await runMcpProxyCommand({
+        command,
+        workspace: options.workspace,
+        session: options.session,
+        serverName: options.serverName,
+        port: options.port,
+        db: options.db,
+        config: options.config,
+        server: options.server,
+      });
+    } catch (err: any) {
+      process.stderr.write(`\n❌ MCP Proxy Error: ${err.message}\n`);
+      process.exit(1);
+    }
+  });
+
+// 8. Kill Switch Commands (`agent-monitor kill` / `resume`)
+program
+  .command("kill")
+  .description(
+    "Activate the authoritative local circuit breaker / kill switch for an agent session",
+  )
+  .option(
+    "-s, --session <id>",
+    "Target session ID (defaults to active session)",
+  )
+  .option(
+    "-r, --reason <reason>",
+    "Reason for killing the session",
+    "Operator activated kill switch via CLI",
+  )
+  .option("-w, --workspace <path>", "Workspace directory", process.cwd())
+  .option("--db <path>", "Custom SQLite database file path")
+  .option(
+    "-p, --port <port>",
+    "Monitor Server port to notify",
+    (val) => parseInt(val, 10),
+    4040,
+  )
+  .action(async (options) => {
+    try {
+      await runKillCommand(options);
+    } catch (err: any) {
+      console.error(`\n❌ Error: ${err.message}`);
+      process.exit(1);
+    }
+  });
+
+program
+  .command("resume")
+  .description(
+    "Deactivate the kill switch and resume execution for an agent session",
+  )
+  .option(
+    "-s, --session <id>",
+    "Target session ID (defaults to active session)",
+  )
+  .option("-w, --workspace <path>", "Workspace directory", process.cwd())
+  .option("--db <path>", "Custom SQLite database file path")
+  .option(
+    "-p, --port <port>",
+    "Monitor Server port to notify",
+    (val) => parseInt(val, 10),
+    4040,
+  )
+  .action(async (options) => {
+    try {
+      await runResumeCommand(options);
+    } catch (err: any) {
+      console.error(`\n❌ Error: ${err.message}`);
+      process.exit(1);
+    }
+  });
+
+// 9. External Tool Inspection (`agent-monitor tools`)
+program
+  .command("tools")
+  .description(
+    "Inspect external tool fingerprints, baseline integrity, and mutation status (rug-pull detection)",
+  )
+  .option("-s, --session <id>", "Target session ID")
+  .option("-w, --workspace <path>", "Workspace directory", process.cwd())
+  .option("--db <path>", "Custom SQLite database file path")
+  .option(
+    "-p, --port <port>",
+    "Monitor Server port to query",
+    (val) => parseInt(val, 10),
+    4040,
+  )
+  .action(async (options) => {
+    try {
+      await runToolsCommand(options);
+    } catch (err: any) {
+      console.error(`\n❌ Error: ${err.message}`);
+      process.exit(1);
+    }
+  });
+
+// 10. Behavioral Data Flow Inspection (`agent-monitor security flows`)
+const secCmd = program
+  .command("security")
+  .description(
+    "Inspect security data flows and behavioral sequence violations",
+  );
+
+secCmd
+  .command("flows")
+  .description(
+    "Inspect detected behavioral data-flow sequences and multi-step exfiltration attempts",
+  )
+  .option("-s, --session <id>", "Target session ID")
+  .option("-w, --workspace <path>", "Workspace directory", process.cwd())
+  .option("--db <path>", "Custom SQLite database file path")
+  .option(
+    "-p, --port <port>",
+    "Monitor Server port to query",
+    (val) => parseInt(val, 10),
+    4040,
+  )
+  .action(async (options) => {
+    try {
+      await runSecurityFlowsCommand(options);
     } catch (err: any) {
       console.error(`\n❌ Error: ${err.message}`);
       process.exit(1);

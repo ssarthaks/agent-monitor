@@ -112,4 +112,14 @@ export const DETERMINISTIC_RISK_RULES: RiskRule[] = [
       return /(^|[/\\])\.git([/\\]|$)/i.test(pathStr);
     },
   },
+  // 8. Tool schema rug-pull mutation
+  {
+    id: 'TOOL_SCHEMA_MUTATED',
+    description: 'External tool definition or schema was dynamically mutated after initial discovery (rug-pull risk)',
+    severity: 'HIGH',
+    scoreImpact: 50,
+    matches: (_kind, _params, context) => {
+      return Boolean(context?.isToolMutated);
+    },
+  },
 ];
