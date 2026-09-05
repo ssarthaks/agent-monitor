@@ -1,0 +1,1524 @@
+<!doctype html>
+<html lang="en" class="scroll-smooth">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>
+      Agent Monitor — Deterministic Runtime Control Plane for AI Agents
+    </title>
+    <meta
+      name="description"
+      content="Treat AI Agent Actions as Untrusted Syscalls. Universal 14-stage fail-closed runtime boundary, SQLite WAL persistence, transparent MCP proxy, and cryptographic audit chaining."
+    />
+
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            colors: {
+              alabaster: {
+                DEFAULT: "#FAFAFA",
+                surface: "#FFFFFF",
+                muted: "#F4F4F6",
+                elevated: "#EEEEF1",
+                border: "#E2E4E9",
+                borderDark: "#D0D3DB",
+              },
+              ink: {
+                DEFAULT: "#2B2D42",
+                dark: "#1B1D2C",
+                surface: "#353852",
+                muted: "#5D617A",
+                faint: "#8D92A8",
+              },
+              terracotta: {
+                DEFAULT: "#D46A43",
+                hover: "#E27D60",
+                light: "#FDF3EF",
+                border: "#F7CABA",
+              },
+            },
+            fontFamily: {
+              sans: [
+                "Inter",
+                "-apple-system",
+                "BlinkMacSystemFont",
+                "Segoe UI",
+                "Roboto",
+                "sans-serif",
+              ],
+              mono: [
+                "JetBrains Mono",
+                "Fira Code",
+                "ui-monospace",
+                "Menlo",
+                "monospace",
+              ],
+            },
+          },
+        },
+      };
+    </script>
+
+    <!-- Google Fonts & Lucide Icons -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <script src="https://unpkg.com/lucide@latest"></script>
+
+    <style>
+      body {
+        background-color: #fafafa;
+        color: #2b2d42;
+        font-family:
+          "Inter",
+          -apple-system,
+          BlinkMacSystemFont,
+          "Segoe UI",
+          Roboto,
+          sans-serif;
+        -webkit-font-smoothing: antialiased;
+      }
+      ::selection {
+        background-color: #d46a43;
+        color: #fafafa;
+      }
+      /* Clean, subtle dot pattern */
+      .subtle-dots {
+        background-image: radial-gradient(#d0d3db 0.75px, transparent 0.75px);
+        background-size: 24px 24px;
+      }
+    </style>
+  </head>
+  <body
+    class="selection:bg-terracotta selection:text-white antialiased text-ink min-h-screen"
+  >
+    <!-- Subtle Ambient Background Pattern -->
+    <div
+      class="fixed inset-0 subtle-dots opacity-40 pointer-events-none z-0"
+    ></div>
+
+    <!-- STICKY HEADER -->
+    <header
+      class="sticky top-0 z-50 backdrop-blur-md bg-alabaster/90 border-b border-alabaster-border"
+    >
+      <div
+        class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between"
+      >
+        <!-- Logo -->
+        <a href="#" class="flex items-center gap-3">
+          <div
+            class="w-8 h-8 rounded-md bg-terracotta flex items-center justify-center text-white shadow-sm"
+          >
+            <i data-lucide="shield-check" class="w-4 h-4 stroke-[2.5]"></i>
+          </div>
+          <div class="flex items-center gap-2">
+            <span
+              class="font-bold text-ink tracking-tight text-sm sm:text-base font-sans"
+              >AGENT MONITOR</span
+            >
+            <span
+              class="text-[10px] font-mono font-semibold px-2 py-0.5 rounded bg-terracotta-light text-terracotta border border-terracotta-border"
+              >v4.1.1</span
+            >
+          </div>
+        </a>
+
+        <!-- Desktop Nav -->
+        <nav
+          class="hidden md:flex items-center gap-7 text-xs font-medium text-ink-muted"
+        >
+          <a href="#why" class="hover:text-ink transition-colors"
+            >Runtime vs Prompt</a
+          >
+          <a href="#simulator" class="hover:text-ink transition-colors"
+            >Interactive Simulator</a
+          >
+          <a href="#pipeline" class="hover:text-ink transition-colors"
+            >14-Stage Invariant</a
+          >
+          <a href="#features" class="hover:text-ink transition-colors"
+            >Features</a
+          >
+          <a href="#architecture" class="hover:text-ink transition-colors"
+            >Architecture</a
+          >
+          <a href="#quickstart" class="hover:text-ink transition-colors"
+            >Quickstart</a
+          >
+        </nav>
+
+        <!-- Action Buttons -->
+        <div class="flex items-center gap-2.5">
+          <a
+            href="https://github.com/ssarthaks/agent-monitor"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-md border border-alabaster-border bg-white hover:bg-alabaster-muted text-ink shadow-sm transition-all"
+          >
+            <svg
+              class="w-3.5 h-3.5 fill-current shrink-0"
+              viewBox="0 0 24 24"
+              aria-hidden="true"
+            >
+              <path
+                fill-rule="evenodd"
+                clip-rule="evenodd"
+                d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.53 1.032 1.53 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z"
+              />
+            </svg>
+            <span>GitHub</span>
+          </a>
+          <a
+            href="https://www.npmjs.com/package/@agent-monitor/cli"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="flex items-center gap-1.5 text-xs font-semibold px-3.5 py-1.5 rounded-md bg-terracotta hover:bg-terracotta-hover text-white shadow-sm transition-all"
+          >
+            <i data-lucide="package" class="w-3.5 h-3.5"></i>
+            <span>npm</span>
+          </a>
+        </div>
+      </div>
+    </header>
+
+    <!-- HERO SECTION -->
+    <section
+      class="relative z-10 pt-16 pb-20 px-4 sm:px-6 lg:px-8 text-center max-w-5xl mx-auto"
+    >
+      <!-- Announcement Badge -->
+      <div
+        class="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-terracotta-border bg-terracotta-light text-terracotta text-xs font-semibold mb-6"
+      >
+        <span class="w-1.5 h-1.5 rounded-full bg-terracotta"></span>
+        <span>Agent Monitor v4.1.1</span>
+        <span class="text-terracotta-border">•</span>
+        <span class="text-ink-muted"
+          >Production Hardening & Auto Git Exclusion</span
+        >
+      </div>
+
+      <!-- Main Headline -->
+      <h1
+        class="text-4xl sm:text-6xl font-extrabold tracking-tight text-ink leading-[1.15] mb-6"
+      >
+        Treat AI Agent Actions as <br class="hidden sm:block" />
+        <span class="text-terracotta">Untrusted Syscalls.</span>
+      </h1>
+
+      <!-- Subheadline -->
+      <p
+        class="text-base sm:text-lg text-ink-muted max-w-3xl mx-auto font-normal leading-relaxed mb-8"
+      >
+        The deterministic, local-first runtime control plane for autonomous
+        coding agents. Intercept shell execution, contain filesystem paths,
+        redact leaked secrets, enforce human approval gates, and chain
+        tamper-proof SHA-256 audit logs before code runs on your host machine.
+      </p>
+
+      <!-- Quick Run Terminal Bar -->
+      <div
+        class="max-w-2xl mx-auto bg-white border border-alabaster-border rounded-lg p-2.5 sm:p-3 shadow-sm flex items-center justify-between gap-3 mb-8 text-left"
+      >
+        <div
+          class="flex items-center gap-3 min-w-0 pl-2 font-mono text-xs sm:text-sm"
+        >
+          <span class="text-terracotta font-bold select-none">$</span>
+          <span class="text-ink truncate"
+            >npx @agent-monitor/cli check --command "git push origin main"</span
+          >
+        </div>
+        <button
+          onclick="copyHeroCmd(this)"
+          class="shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded bg-alabaster-muted hover:bg-alabaster-elevated border border-alabaster-border text-xs font-semibold text-ink-muted hover:text-ink transition-colors"
+        >
+          <i data-lucide="copy" class="w-3.5 h-3.5"></i>
+          <span>Copy</span>
+        </button>
+      </div>
+
+      <!-- CTA Links -->
+      <div class="flex flex-wrap items-center justify-center gap-3 text-xs">
+        <a
+          href="#simulator"
+          class="flex items-center gap-2 px-5 py-2.5 rounded-md bg-terracotta hover:bg-terracotta-hover text-white font-semibold shadow-sm transition-all text-xs sm:text-sm"
+        >
+          <i data-lucide="play" class="w-3.5 h-3.5 fill-current"></i>
+          <span>Test Interactive Simulator</span>
+        </a>
+        <a
+          href="#pipeline"
+          class="flex items-center gap-2 px-5 py-2.5 rounded-md bg-white hover:bg-alabaster-muted border border-alabaster-border text-ink font-semibold shadow-sm transition-all text-xs sm:text-sm"
+        >
+          <i data-lucide="shield" class="w-3.5 h-3.5"></i>
+          <span>View 14-Stage Invariant</span>
+        </a>
+        <a
+          href="#quickstart"
+          class="flex items-center gap-2 px-5 py-2.5 rounded-md bg-white hover:bg-alabaster-muted border border-alabaster-border text-ink-muted hover:text-ink font-semibold shadow-sm transition-all text-xs sm:text-sm"
+        >
+          <i data-lucide="terminal" class="w-3.5 h-3.5"></i>
+          <span>Quickstart Setup</span>
+        </a>
+      </div>
+
+      <!-- Metrics Strip -->
+      <div
+        class="grid grid-cols-2 sm:grid-cols-4 gap-3 max-w-4xl mx-auto mt-14 pt-10 border-t border-alabaster-border text-left"
+      >
+        <div class="p-4 rounded-lg bg-white border border-alabaster-border">
+          <div class="text-2xl font-bold text-ink font-mono tracking-tight">
+            14 Stages
+          </div>
+          <div class="text-xs text-ink-muted mt-1">
+            Universal Control Boundary
+          </div>
+        </div>
+        <div class="p-4 rounded-lg bg-white border border-alabaster-border">
+          <div
+            class="text-2xl font-bold text-emerald-700 font-mono tracking-tight"
+          >
+            206 / 206
+          </div>
+          <div class="text-xs text-ink-muted mt-1">
+            Adversarial Tests Passing
+          </div>
+        </div>
+        <div class="p-4 rounded-lg bg-white border border-alabaster-border">
+          <div class="text-2xl font-bold text-ink font-mono tracking-tight">
+            SQLite WAL
+          </div>
+          <div class="text-xs text-ink-muted mt-1">100% Local-First Engine</div>
+        </div>
+        <div class="p-4 rounded-lg bg-white border border-alabaster-border">
+          <div
+            class="text-2xl font-bold text-terracotta font-mono tracking-tight"
+          >
+            &lt; 1ms
+          </div>
+          <div class="text-xs text-ink-muted mt-1">Interception Overhead</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- RUNTIME VS PROMPT SAFETY -->
+    <section
+      id="why"
+      class="relative z-10 py-16 px-4 sm:px-6 lg:px-8 max-w-6xl mx-auto border-t border-alabaster-border"
+    >
+      <div class="text-center max-w-3xl mx-auto mb-12">
+        <span
+          class="text-xs font-bold uppercase tracking-widest text-terracotta"
+          >Architectural Reality</span
+        >
+        <h2 class="text-2xl sm:text-3xl font-extrabold text-ink mt-2">
+          Prompt Engineering is Not a Security Boundary.
+        </h2>
+        <p class="text-ink-muted text-sm mt-3">
+          When an autonomous coding agent executes shell commands and writes to
+          disk, relying on system prompts is mathematically unsafe against
+          prompt injection, malicious repo files, or hallucinations.
+        </p>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-5xl mx-auto">
+        <!-- Flawed Approach -->
+        <div
+          class="p-6 rounded-xl bg-white border border-rose-200 flex flex-col justify-between"
+        >
+          <div>
+            <div class="flex items-center gap-2.5 mb-4">
+              <div
+                class="w-7 h-7 rounded bg-rose-50 border border-rose-200 flex items-center justify-center text-rose-600"
+              >
+                <i data-lucide="x" class="w-4 h-4 stroke-[3]"></i>
+              </div>
+              <h3 class="text-sm font-bold text-ink">
+                Prompt-Layer "Safety" (Probabilistic)
+              </h3>
+            </div>
+            <p class="text-xs text-ink-muted mb-5 leading-relaxed">
+              System prompts asking the LLM:
+              <em
+                >"Please do not delete user files, inspect .env, or push to git
+                without asking"</em
+              >.
+            </p>
+            <ul class="space-y-2.5 text-xs text-ink-muted">
+              <li class="flex items-start gap-2">
+                <i
+                  data-lucide="alert-circle"
+                  class="w-4 h-4 text-rose-500 shrink-0 mt-0.5"
+                ></i>
+                <span
+                  ><strong>Indirect Prompt Injections:</strong> Untrusted text
+                  inside downloaded packages or READMEs easily overrides
+                  instructions.</span
+                >
+              </li>
+              <li class="flex items-start gap-2">
+                <i
+                  data-lucide="alert-circle"
+                  class="w-4 h-4 text-rose-500 shrink-0 mt-0.5"
+                ></i>
+                <span
+                  ><strong>No True Containment:</strong> Path traversal escapes
+                  (<code>../../etc/passwd</code>) via symlinks, URL encoding, or
+                  relative paths.</span
+                >
+              </li>
+              <li class="flex items-start gap-2">
+                <i
+                  data-lucide="alert-circle"
+                  class="w-4 h-4 text-rose-500 shrink-0 mt-0.5"
+                ></i>
+                <span
+                  ><strong>Silent Credential Exfiltration:</strong> The model
+                  reads secrets from disk and transmits them in follow-up
+                  network calls.</span
+                >
+              </li>
+              <li class="flex items-start gap-2">
+                <i
+                  data-lucide="alert-circle"
+                  class="w-4 h-4 text-rose-500 shrink-0 mt-0.5"
+                ></i>
+                <span
+                  ><strong>Unchecked Loops:</strong> No authoritative circuit
+                  breaker if the model hallucinate-loops destructive
+                  actions.</span
+                >
+              </li>
+            </ul>
+          </div>
+          <div
+            class="mt-6 pt-3 border-t border-rose-100 text-[11px] font-mono text-rose-600"
+          >
+            Enforcement: Zero guarantees. Fails closed = 0%.
+          </div>
+        </div>
+
+        <!-- Agent Monitor Approach -->
+        <div
+          class="p-6 rounded-xl bg-white border border-emerald-300 flex flex-col justify-between shadow-sm"
+        >
+          <div>
+            <div class="flex items-center gap-2.5 mb-4">
+              <div
+                class="w-7 h-7 rounded bg-emerald-50 border border-emerald-200 flex items-center justify-center text-emerald-700"
+              >
+                <i data-lucide="check" class="w-4 h-4 stroke-[3]"></i>
+              </div>
+              <h3 class="text-sm font-bold text-ink">
+                Agent Monitor Runtime Plane (Deterministic)
+              </h3>
+            </div>
+            <p class="text-xs text-ink-muted mb-5 leading-relaxed">
+              Every tool call, MCP stdio packet, and shell execution is
+              intercepted outside the LLM context before it hits the operating
+              system.
+            </p>
+            <ul class="space-y-2.5 text-xs text-ink-muted">
+              <li class="flex items-start gap-2">
+                <i
+                  data-lucide="shield-check"
+                  class="w-4 h-4 text-emerald-600 shrink-0 mt-0.5"
+                ></i>
+                <span
+                  ><strong>14-Stage Control Boundary:</strong> Strict payload
+                  bounds, canonicalization, and RFC 8089 URI
+                  normalization.</span
+                >
+              </li>
+              <li class="flex items-start gap-2">
+                <i
+                  data-lucide="shield-check"
+                  class="w-4 h-4 text-emerald-600 shrink-0 mt-0.5"
+                ></i>
+                <span
+                  ><strong>Deterministic Policy AST:</strong> Mathematical
+                  additive specificity:
+                  <code>DENY &gt; ASK &gt; ALLOW</code>.</span
+                >
+              </li>
+              <li class="flex items-start gap-2">
+                <i
+                  data-lucide="shield-check"
+                  class="w-4 h-4 text-emerald-600 shrink-0 mt-0.5"
+                ></i>
+                <span
+                  ><strong>Deep Secret Redactor:</strong> Strips OpenAI, AWS,
+                  GitHub tokens, and private keys before returning output.</span
+                >
+              </li>
+              <li class="flex items-start gap-2">
+                <i
+                  data-lucide="shield-check"
+                  class="w-4 h-4 text-emerald-600 shrink-0 mt-0.5"
+                ></i>
+                <span
+                  ><strong>Authoritative Kill Switch:</strong> Instantly halts
+                  runaway processes via atomic SQLite WAL state.</span
+                >
+              </li>
+            </ul>
+          </div>
+          <div
+            class="mt-6 pt-3 border-t border-emerald-100 text-[11px] font-mono text-emerald-700"
+          >
+            Enforcement: Authoritative fail-closed runtime barrier.
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- INTERACTIVE LIVE POLICY SIMULATOR -->
+    <section
+      id="simulator"
+      class="relative z-10 py-16 px-4 sm:px-6 lg:px-8 max-w-6xl mx-auto border-t border-alabaster-border"
+    >
+      <div class="text-center max-w-3xl mx-auto mb-10">
+        <span
+          class="text-xs font-bold uppercase tracking-widest text-terracotta"
+          >Real-Time Playground</span
+        >
+        <h2 class="text-2xl sm:text-3xl font-extrabold text-ink mt-2">
+          Policy Evaluation Simulator
+        </h2>
+        <p class="text-ink-muted text-xs sm:text-sm mt-2">
+          Test how the deterministic engine inspects commands, evaluates risk
+          scores, and resolves decisions.
+        </p>
+      </div>
+
+      <!-- Simulator Box -->
+      <div
+        class="max-w-4xl mx-auto bg-white border border-alabaster-border rounded-xl shadow-sm overflow-hidden"
+      >
+        <!-- Simulator Header -->
+        <div
+          class="px-5 py-3 bg-alabaster-muted border-b border-alabaster-border flex items-center justify-between"
+        >
+          <div class="flex items-center gap-2">
+            <div class="w-2.5 h-2.5 rounded-full bg-slate-300"></div>
+            <div class="w-2.5 h-2.5 rounded-full bg-slate-300"></div>
+            <div class="w-2.5 h-2.5 rounded-full bg-slate-300"></div>
+            <span class="text-xs font-mono font-medium text-ink-muted ml-2"
+              >agent-monitor check --dry-run</span
+            >
+          </div>
+          <span class="text-[11px] font-mono text-ink-faint"
+            >14-Stage Universal Boundary</span
+          >
+        </div>
+
+        <!-- Presets -->
+        <div
+          class="p-4 sm:p-5 border-b border-alabaster-border bg-alabaster/60"
+        >
+          <div class="text-xs font-medium text-ink-muted mb-2.5">
+            Preset Scenarios:
+          </div>
+          <div class="flex flex-wrap gap-2 text-xs font-mono">
+            <button
+              onclick="setSimCommand('rm -rf /', 'process.exec', '')"
+              class="px-2.5 py-1 rounded bg-white hover:bg-rose-50 border border-rose-200 text-rose-700 transition-colors"
+            >
+              rm -rf / (Dangerous)
+            </button>
+            <button
+              onclick="
+                setSimCommand('git push origin main', 'process.exec', '')
+              "
+              class="px-2.5 py-1 rounded bg-white hover:bg-amber-50 border border-amber-200 text-amber-700 transition-colors"
+            >
+              git push origin main (Approval Gate)
+            </button>
+            <button
+              onclick="setSimCommand('', 'file.write', '../../etc/passwd')"
+              class="px-2.5 py-1 rounded bg-white hover:bg-rose-50 border border-rose-200 text-rose-700 transition-colors"
+            >
+              write ../../etc/passwd (Traversal)
+            </button>
+            <button
+              onclick="setSimCommand('npm i axios', 'process.exec', '')"
+              class="px-2.5 py-1 rounded bg-white hover:bg-amber-50 border border-amber-200 text-amber-700 transition-colors"
+            >
+              npm i axios (Package Gate)
+            </button>
+            <button
+              onclick="setSimCommand('ls -la src', 'process.exec', '')"
+              class="px-2.5 py-1 rounded bg-white hover:bg-emerald-50 border border-emerald-200 text-emerald-700 transition-colors"
+            >
+              ls -la src (Safe Read)
+            </button>
+          </div>
+        </div>
+
+        <!-- Controls -->
+        <div class="p-5 sm:p-6 space-y-5">
+          <div class="grid grid-cols-1 sm:grid-cols-12 gap-3.5">
+            <div class="sm:col-span-4">
+              <label class="block text-xs font-semibold text-ink-muted mb-1"
+                >Action Kind</label
+              >
+              <select
+                id="simAction"
+                onchange="runSimulation()"
+                class="w-full bg-alabaster border border-alabaster-border rounded-md px-3 py-2 text-xs font-mono text-ink focus:outline-none focus:border-terracotta"
+              >
+                <option value="process.exec">
+                  process.exec (Shell Command)
+                </option>
+                <option value="file.write">file.write (File Mutation)</option>
+                <option value="file.read">file.read (File Read)</option>
+              </select>
+            </div>
+            <div class="sm:col-span-8">
+              <label class="block text-xs font-semibold text-ink-muted mb-1"
+                >Command or Target Path</label
+              >
+              <div class="relative">
+                <input
+                  type="text"
+                  id="simInput"
+                  value="git push origin main"
+                  oninput="runSimulation()"
+                  class="w-full bg-alabaster border border-alabaster-border rounded-md pl-3 pr-10 py-2 text-xs font-mono text-ink focus:outline-none focus:border-terracotta"
+                  placeholder="Enter shell command or file path..."
+                />
+                <button
+                  onclick="runSimulation()"
+                  class="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-ink-muted hover:text-ink"
+                >
+                  <i
+                    data-lucide="arrow-right"
+                    class="w-3.5 h-3.5 text-terracotta"
+                  ></i>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Result Box -->
+          <div
+            id="simResultBox"
+            class="p-4 rounded-lg border transition-all text-xs font-mono"
+          >
+            <!-- Populated by JS -->
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 14-STAGE INVARIANT PIPELINE -->
+    <section
+      id="pipeline"
+      class="relative z-10 py-16 px-4 sm:px-6 lg:px-8 max-w-6xl mx-auto border-t border-alabaster-border"
+    >
+      <div class="text-center max-w-3xl mx-auto mb-12">
+        <span
+          class="text-xs font-bold uppercase tracking-widest text-terracotta"
+          >Fail-Closed Guarantee</span
+        >
+        <h2 class="text-2xl sm:text-3xl font-extrabold text-ink mt-2">
+          The 14-Stage Security Invariant
+        </h2>
+        <p class="text-ink-muted text-xs sm:text-sm mt-2">
+          Every agent operation and MCP tool call traverses all 14 stages in
+          strict chronological order. No tool can bypass any step.
+        </p>
+      </div>
+
+      <!-- 14 Stages Grid -->
+      <div
+        class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5 max-w-6xl mx-auto"
+      >
+        <div
+          class="p-4 rounded-lg bg-white border border-alabaster-border hover:border-terracotta-border transition-colors"
+        >
+          <div
+            class="flex items-center justify-between text-xs font-mono mb-1.5"
+          >
+            <span class="text-terracotta font-bold">STAGE 01</span>
+            <span class="text-ink-faint">INGRESS</span>
+          </div>
+          <h3 class="text-xs font-bold text-ink mb-1">
+            Payload & Argument Bounds
+          </h3>
+          <p class="text-xs text-ink-muted leading-relaxed">
+            Enforces 10MB JSON-RPC message framing and 1MB argument caps to
+            neutralize memory exhaustion & crash vectors.
+          </p>
+        </div>
+
+        <div
+          class="p-4 rounded-lg bg-white border border-alabaster-border hover:border-terracotta-border transition-colors"
+        >
+          <div
+            class="flex items-center justify-between text-xs font-mono mb-1.5"
+          >
+            <span class="text-terracotta font-bold">STAGE 02</span>
+            <span class="text-ink-faint">KILL SWITCH</span>
+          </div>
+          <h3 class="text-xs font-bold text-ink mb-1">
+            Authoritative Circuit Breaker
+          </h3>
+          <p class="text-xs text-ink-muted leading-relaxed">
+            Atomic pre-execution check against SQLite WAL. Instantly halts
+            runaway agent sessions across CLI and Web UI.
+          </p>
+        </div>
+
+        <div
+          class="p-4 rounded-lg bg-white border border-alabaster-border hover:border-terracotta-border transition-colors"
+        >
+          <div
+            class="flex items-center justify-between text-xs font-mono mb-1.5"
+          >
+            <span class="text-terracotta font-bold">STAGE 03</span>
+            <span class="text-ink-faint">ISOLATION</span>
+          </div>
+          <h3 class="text-xs font-bold text-ink mb-1">
+            Sticky Source Quarantine
+          </h3>
+          <p class="text-xs text-ink-muted leading-relaxed">
+            Permanently quarantines malicious or altered MCP sources in SQLite.
+            Blocks subsequent invocations immediately.
+          </p>
+        </div>
+
+        <div
+          class="p-4 rounded-lg bg-white border border-alabaster-border hover:border-terracotta-border transition-colors"
+        >
+          <div
+            class="flex items-center justify-between text-xs font-mono mb-1.5"
+          >
+            <span class="text-terracotta font-bold">STAGE 04</span>
+            <span class="text-ink-faint">RATE LIMIT</span>
+          </div>
+          <h3 class="text-xs font-bold text-ink mb-1">
+            Sliding Window Protection
+          </h3>
+          <p class="text-xs text-ink-muted leading-relaxed">
+            Restricts tool calls to 60 requests/minute per session to stop
+            infinite recursive loops and rapid resource exhaustion.
+          </p>
+        </div>
+
+        <div
+          class="p-4 rounded-lg bg-white border border-alabaster-border hover:border-terracotta-border transition-colors"
+        >
+          <div
+            class="flex items-center justify-between text-xs font-mono mb-1.5"
+          >
+            <span class="text-terracotta font-bold">STAGE 05</span>
+            <span class="text-ink-faint">CANONICALIZE</span>
+          </div>
+          <h3 class="text-xs font-bold text-ink mb-1">Command Normalization</h3>
+          <p class="text-xs text-ink-muted leading-relaxed">
+            Standardizes shell commands, strips privilege wrappers (sudo, env,
+            bash -c), and normalizes package manager aliases.
+          </p>
+        </div>
+
+        <div
+          class="p-4 rounded-lg bg-white border border-alabaster-border hover:border-terracotta-border transition-colors"
+        >
+          <div
+            class="flex items-center justify-between text-xs font-mono mb-1.5"
+          >
+            <span class="text-terracotta font-bold">STAGE 06</span>
+            <span class="text-ink-faint">CONTAINMENT</span>
+          </div>
+          <h3 class="text-xs font-bold text-ink mb-1">
+            Workspace Path Guardrails
+          </h3>
+          <p class="text-xs text-ink-muted leading-relaxed">
+            Unicode NFC normalization, multi-pass URL decoding (%252e%252e),
+            symlink resolution, and cross-drive isolation.
+          </p>
+        </div>
+
+        <div
+          class="p-4 rounded-lg bg-white border border-alabaster-border hover:border-terracotta-border transition-colors"
+        >
+          <div
+            class="flex items-center justify-between text-xs font-mono mb-1.5"
+          >
+            <span class="text-terracotta font-bold">STAGE 07</span>
+            <span class="text-ink-faint">RISK ENGINE</span>
+          </div>
+          <h3 class="text-xs font-bold text-ink mb-1">
+            Risk & Mutation Scoring
+          </h3>
+          <p class="text-xs text-ink-muted leading-relaxed">
+            Calculates deterministic 0–100 CWE risk score. Detects tool schema
+            mutations (rug-pulls) via SHA-256 fingerprints.
+          </p>
+        </div>
+
+        <div
+          class="p-4 rounded-lg bg-white border border-alabaster-border hover:border-terracotta-border transition-colors"
+        >
+          <div
+            class="flex items-center justify-between text-xs font-mono mb-1.5"
+          >
+            <span class="text-terracotta font-bold">STAGE 08</span>
+            <span class="text-ink-faint">POLICY AST</span>
+          </div>
+          <h3 class="text-xs font-bold text-ink mb-1">
+            Deterministic Evaluation
+          </h3>
+          <p class="text-xs text-ink-muted leading-relaxed">
+            Mathematical additive specificity resolution. Strictest decision
+            always takes precedence: <code>DENY &gt; ASK &gt; ALLOW</code>.
+          </p>
+        </div>
+
+        <div
+          class="p-4 rounded-lg bg-white border border-alabaster-border hover:border-terracotta-border transition-colors"
+        >
+          <div
+            class="flex items-center justify-between text-xs font-mono mb-1.5"
+          >
+            <span class="text-terracotta font-bold">STAGE 09</span>
+            <span class="text-ink-faint">HUMAN GATE</span>
+          </div>
+          <h3 class="text-xs font-bold text-ink mb-1">
+            Interactive Human Approval
+          </h3>
+          <p class="text-xs text-ink-muted leading-relaxed">
+            Interactive confirmation prompt in terminal CLI or 1-click modal in
+            the Web Operations Dashboard before execution.
+          </p>
+        </div>
+
+        <div
+          class="p-4 rounded-lg bg-white border border-alabaster-border hover:border-terracotta-border transition-colors"
+        >
+          <div
+            class="flex items-center justify-between text-xs font-mono mb-1.5"
+          >
+            <span class="text-terracotta font-bold">STAGE 10</span>
+            <span class="text-ink-faint">REVALIDATION</span>
+          </div>
+          <h3 class="text-xs font-bold text-ink mb-1">
+            Post-Approval Re-Check
+          </h3>
+          <p class="text-xs text-ink-muted leading-relaxed">
+            Prevents time-of-check to time-of-use (TOCTOU) exploits. Revalidates
+            action context hash, expiration timeouts, and kill switch.
+          </p>
+        </div>
+
+        <div
+          class="p-4 rounded-lg bg-white border border-alabaster-border hover:border-terracotta-border transition-colors"
+        >
+          <div
+            class="flex items-center justify-between text-xs font-mono mb-1.5"
+          >
+            <span class="text-terracotta font-bold">STAGE 11</span>
+            <span class="text-ink-faint">EXECUTION</span>
+          </div>
+          <h3 class="text-xs font-bold text-ink mb-1">
+            Bounded Process Execution
+          </h3>
+          <p class="text-xs text-ink-muted leading-relaxed">
+            Execution in bounded child process with strict 30-second timeout,
+            memory bounds, and idempotency guarantees.
+          </p>
+        </div>
+
+        <div
+          class="p-4 rounded-lg bg-white border border-alabaster-border hover:border-terracotta-border transition-colors"
+        >
+          <div
+            class="flex items-center justify-between text-xs font-mono mb-1.5"
+          >
+            <span class="text-terracotta font-bold">STAGE 12</span>
+            <span class="text-ink-faint">DATA PRIVACY</span>
+          </div>
+          <h3 class="text-xs font-bold text-ink mb-1">Deep Secret Redaction</h3>
+          <p class="text-xs text-ink-muted leading-relaxed">
+            Automatic deep redaction for OpenAI, AWS, GitHub tokens, and private
+            keys. Detects multi-step file exfiltration patterns.
+          </p>
+        </div>
+
+        <div
+          class="p-4 rounded-lg bg-white border border-alabaster-border hover:border-terracotta-border transition-colors"
+        >
+          <div
+            class="flex items-center justify-between text-xs font-mono mb-1.5"
+          >
+            <span class="text-terracotta font-bold">STAGE 13</span>
+            <span class="text-ink-faint">CRYPTOGRAPHY</span>
+          </div>
+          <h3 class="text-xs font-bold text-ink mb-1">
+            SHA-256 Audit Chaining
+          </h3>
+          <p class="text-xs text-ink-muted leading-relaxed">
+            Every event is cryptographically hashed with its predecessor into
+            SQLite WAL. Detects any offline tampering or log deletion.
+          </p>
+        </div>
+
+        <div
+          class="p-4 rounded-lg bg-white border border-alabaster-border hover:border-terracotta-border transition-colors"
+        >
+          <div
+            class="flex items-center justify-between text-xs font-mono mb-1.5"
+          >
+            <span class="text-terracotta font-bold">STAGE 14</span>
+            <span class="text-ink-faint">INCIDENT OPS</span>
+          </div>
+          <h3 class="text-xs font-bold text-ink mb-1">Incident Escalation</h3>
+          <p class="text-xs text-ink-muted leading-relaxed">
+            Automated security incident creation and live SSE broadcasting to
+            operations dashboards and security teams.
+          </p>
+        </div>
+
+        <div
+          class="p-4 rounded-lg bg-alabaster-muted border border-alabaster-border flex flex-col justify-center items-center text-center"
+        >
+          <i data-lucide="check-check" class="w-6 h-6 text-terracotta mb-2"></i>
+          <span class="text-xs font-bold text-ink"
+            >Zero Trust Syscall Model</span
+          >
+          <span class="text-[11px] text-ink-muted mt-0.5"
+            >Fail-closed default across all stages</span
+          >
+        </div>
+      </div>
+    </section>
+
+    <!-- ARCHITECTURE FLOW -->
+    <section
+      id="architecture"
+      class="relative z-10 py-16 px-4 sm:px-6 lg:px-8 max-w-6xl mx-auto border-t border-alabaster-border"
+    >
+      <div class="text-center max-w-3xl mx-auto mb-10">
+        <span
+          class="text-xs font-bold uppercase tracking-widest text-terracotta"
+          >Local-First Topology</span
+        >
+        <h2 class="text-2xl sm:text-3xl font-extrabold text-ink mt-2">
+          Architecture & Execution Flow
+        </h2>
+        <p class="text-ink-muted text-xs sm:text-sm mt-2">
+          Transparently sits between agent frameworks and the operating system
+          with zero external cloud dependencies.
+        </p>
+      </div>
+
+      <div
+        class="max-w-4xl mx-auto bg-white border border-alabaster-border rounded-xl p-5 sm:p-6 shadow-sm"
+      >
+        <div class="font-mono text-xs text-ink leading-relaxed overflow-x-auto">
+          <pre class="text-ink-muted">
++-----------------------------------------------------------------------------------------+
+|                                Autonomous AI Agent Runtime                              |
+|               (Claude Desktop / Cursor / Windsurf / Custom LangChain / AutoGPT)         |
++-----------------------------------------------------------------------------------------+
+                                             |
+                     [stdio / JSON-RPC / CLI / Programmatic SDK]
+                                             v
++-----------------------------------------------------------------------------------------+
+|                           AGENT MONITOR RUNTIME CONTROL PLANE                           |
+|                                                                                         |
+|   1. Ingress Bounds   -->  2. SQLite Kill Switch  -->  3. Source Quarantine             |
+|   4. Rate Limiting    -->  5. Canonicalization    -->  6. RFC 8089 Path Containment    |
+|   7. CWE Risk Engine  -->  8. Specificity AST     -->  9. Human Approval Gate           |
+|                                                                                         |
+|                         [ POLICY DECISION RESOLUTION ]                                  |
+|               +--------------------+--------------------+                               |
+|               |                    |                    |                               |
+|          [ DENY ]               [ ASK ]             [ ALLOW ]                           |
+|     (Halt & Log Event)     (Wait for Human)    (Proceed to Exec)                        |
+|                                    |                    |                               |
+|                                    +---------+----------+                               |
+|                                              |                                          |
+|                                     10. TOCTOU Recheck                                  |
+|                                     11. Controlled Execution (30s timeout)              |
+|                                     12. Deep Secret Redaction                           |
+|                                     13. SHA-256 Ledger Chaining                         |
+|                                     14. Incident SSE Stream                             |
++-----------------------------------------------------------------------------------------+
+                     |                                       |
+                     v                                       v
++----------------------------------------+   +--------------------------------------------+
+|            Host Environment            |   |             Local SQLite WAL               |
+|      (OS Shell, Filesystem, Git)       |   |     (.agent-monitor/agent-monitor.db)      |
+|    - Contained within workspace        |   |   - Cryptographic hash-chained events      |
+|    - Stripped of leaked credentials    |   |   - Auto-excluded from Git commits         |
++----------------------------------------+   +--------------------------------------------+
+        </pre
+          >
+        </div>
+      </div>
+    </section>
+
+    <!-- FEATURES -->
+    <section
+      id="features"
+      class="relative z-10 py-16 px-4 sm:px-6 lg:px-8 max-w-6xl mx-auto border-t border-alabaster-border"
+    >
+      <div class="text-center max-w-3xl mx-auto mb-12">
+        <span
+          class="text-xs font-bold uppercase tracking-widest text-terracotta"
+          >Core Capabilities</span
+        >
+        <h2 class="text-2xl sm:text-3xl font-extrabold text-ink mt-2">
+          Engineered for Autonomous Reliability
+        </h2>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-5 max-w-6xl mx-auto">
+        <!-- Feature 1 -->
+        <div
+          class="p-5 rounded-xl bg-white border border-alabaster-border flex flex-col justify-between"
+        >
+          <div>
+            <div
+              class="w-9 h-9 rounded-lg bg-terracotta-light border border-terracotta-border flex items-center justify-center text-terracotta mb-4"
+            >
+              <i data-lucide="radio" class="w-4 h-4"></i>
+            </div>
+            <h3 class="text-sm font-bold text-ink mb-1.5">
+              Transparent MCP Proxy
+            </h3>
+            <p class="text-xs text-ink-muted leading-relaxed">
+              Drop-in stdio proxy for Claude Desktop, Cursor, and Windsurf.
+              Wraps untrusted MCP servers and sanitizes tool calls in real time.
+            </p>
+          </div>
+          <div
+            class="mt-5 pt-3 border-t border-alabaster-border flex items-center justify-between text-xs text-ink-muted"
+          >
+            <span>tools/call & resources/read</span>
+            <i
+              data-lucide="arrow-right"
+              class="w-3.5 h-3.5 text-terracotta"
+            ></i>
+          </div>
+        </div>
+
+        <!-- Feature 2 -->
+        <div
+          class="p-5 rounded-xl bg-white border border-alabaster-border flex flex-col justify-between"
+        >
+          <div>
+            <div
+              class="w-9 h-9 rounded-lg bg-rose-50 border border-rose-200 flex items-center justify-center text-rose-600 mb-4"
+            >
+              <i data-lucide="power" class="w-4 h-4"></i>
+            </div>
+            <h3 class="text-sm font-bold text-ink mb-1.5">
+              Authoritative Kill Switch
+            </h3>
+            <p class="text-xs text-ink-muted leading-relaxed">
+              Atomic circuit breaker backed by SQLite WAL. If an agent
+              hallucinates or loops destructive commands, stop it immediately
+              from CLI or Web UI.
+            </p>
+          </div>
+          <div
+            class="mt-5 pt-3 border-t border-alabaster-border flex items-center justify-between text-xs text-ink-muted"
+          >
+            <span>Pre & Post Recheck</span>
+            <i data-lucide="arrow-right" class="w-3.5 h-3.5 text-rose-600"></i>
+          </div>
+        </div>
+
+        <!-- Feature 3 -->
+        <div
+          class="p-5 rounded-xl bg-white border border-alabaster-border flex flex-col justify-between"
+        >
+          <div>
+            <div
+              class="w-9 h-9 rounded-lg bg-amber-50 border border-amber-200 flex items-center justify-center text-amber-600 mb-4"
+            >
+              <i data-lucide="key" class="w-4 h-4"></i>
+            </div>
+            <h3 class="text-sm font-bold text-ink mb-1.5">
+              Deep Secret Redaction
+            </h3>
+            <p class="text-xs text-ink-muted leading-relaxed">
+              Automated scanning and redaction of OpenAI, AWS, GitHub tokens,
+              JWTs, and private SSH keys before command outputs reach the LLM.
+            </p>
+          </div>
+          <div
+            class="mt-5 pt-3 border-t border-alabaster-border flex items-center justify-between text-xs text-ink-muted"
+          >
+            <span>Zero Token Leaks</span>
+            <i data-lucide="arrow-right" class="w-3.5 h-3.5 text-amber-600"></i>
+          </div>
+        </div>
+
+        <!-- Feature 4 -->
+        <div
+          class="p-5 rounded-xl bg-white border border-emerald-200 flex flex-col justify-between"
+        >
+          <div>
+            <div
+              class="w-9 h-9 rounded-lg bg-emerald-50 border border-emerald-200 flex items-center justify-center text-emerald-700 mb-4"
+            >
+              <i data-lucide="git-branch" class="w-4 h-4"></i>
+            </div>
+            <h3 class="text-sm font-bold text-ink mb-1.5">
+              Zero-Config Git Exclusion
+            </h3>
+            <p class="text-xs text-ink-muted leading-relaxed">
+              Automatically registers <code>.agent-monitor/</code> into
+              <code>.git/info/exclude</code> and <code>.gitignore</code>. Your
+              internal databases are never published to GitHub.
+            </p>
+          </div>
+          <div
+            class="mt-5 pt-3 border-t border-alabaster-border flex items-center justify-between text-xs text-ink-muted"
+          >
+            <span>Auto Git Protection</span>
+            <i
+              data-lucide="arrow-right"
+              class="w-3.5 h-3.5 text-emerald-700"
+            ></i>
+          </div>
+        </div>
+
+        <!-- Feature 5 -->
+        <div
+          class="p-5 rounded-xl bg-white border border-alabaster-border flex flex-col justify-between"
+        >
+          <div>
+            <div
+              class="w-9 h-9 rounded-lg bg-alabaster-muted border border-alabaster-border flex items-center justify-center text-ink mb-4"
+            >
+              <i data-lucide="hash" class="w-4 h-4"></i>
+            </div>
+            <h3 class="text-sm font-bold text-ink mb-1.5">
+              Cryptographic Audit Ledger
+            </h3>
+            <p class="text-xs text-ink-muted leading-relaxed">
+              Genesis validation, exact sequence monotonicity, and SHA-256
+              recursive canonicalization guarantees audit trail tamper
+              detection.
+            </p>
+          </div>
+          <div
+            class="mt-5 pt-3 border-t border-alabaster-border flex items-center justify-between text-xs text-ink-muted"
+          >
+            <span>agent-monitor audit</span>
+            <i data-lucide="arrow-right" class="w-3.5 h-3.5 text-ink"></i>
+          </div>
+        </div>
+
+        <!-- Feature 6 -->
+        <div
+          class="p-5 rounded-xl bg-white border border-alabaster-border flex flex-col justify-between"
+        >
+          <div>
+            <div
+              class="w-9 h-9 rounded-lg bg-terracotta-light border border-terracotta-border flex items-center justify-center text-terracotta mb-4"
+            >
+              <i data-lucide="layout-dashboard" class="w-4 h-4"></i>
+            </div>
+            <h3 class="text-sm font-bold text-ink mb-1.5">
+              Web Operations Dashboard
+            </h3>
+            <p class="text-xs text-ink-muted leading-relaxed">
+              Lightweight embedded Next.js dashboard with live SSE streaming,
+              visual file diffs, session history dropdown, and incident
+              management.
+            </p>
+          </div>
+          <div
+            class="mt-5 pt-3 border-t border-alabaster-border flex items-center justify-between text-xs text-ink-muted"
+          >
+            <span>agent-monitor server</span>
+            <i
+              data-lucide="arrow-right"
+              class="w-3.5 h-3.5 text-terracotta"
+            ></i>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- QUICKSTART INTEGRATIONS -->
+    <section
+      id="quickstart"
+      class="relative z-10 py-16 px-4 sm:px-6 lg:px-8 max-w-6xl mx-auto border-t border-alabaster-border"
+    >
+      <div class="text-center max-w-3xl mx-auto mb-10">
+        <span
+          class="text-xs font-bold uppercase tracking-widest text-terracotta"
+          >Installation & Quickstart</span
+        >
+        <h2 class="text-2xl sm:text-3xl font-extrabold text-ink mt-2">
+          Get Started in Seconds
+        </h2>
+        <p class="text-ink-muted text-xs sm:text-sm mt-2">
+          Zero external daemons. Zero PostgreSQL or Redis required. Embedded
+          SQLite WAL persistence out of the box.
+        </p>
+      </div>
+
+      <!-- Tabbed Code Box -->
+      <div
+        class="max-w-4xl mx-auto bg-white border border-alabaster-border rounded-xl shadow-sm overflow-hidden"
+      >
+        <!-- Tabs -->
+        <div
+          class="flex items-center border-b border-alabaster-border bg-alabaster-muted overflow-x-auto text-xs font-mono"
+        >
+          <button
+            onclick="setQuickTab('cli')"
+            id="tab-cli"
+            class="px-5 py-3 font-semibold border-b-2 border-terracotta text-ink bg-white transition-colors"
+          >
+            1. CLI Runner
+          </button>
+          <button
+            onclick="setQuickTab('cursor')"
+            id="tab-cursor"
+            class="px-5 py-3 font-medium border-b-2 border-transparent text-ink-muted hover:text-ink transition-colors"
+          >
+            2. Claude Desktop & Cursor MCP
+          </button>
+          <button
+            onclick="setQuickTab('sdk')"
+            id="tab-sdk"
+            class="px-5 py-3 font-medium border-b-2 border-transparent text-ink-muted hover:text-ink transition-colors"
+          >
+            3. TypeScript SDK
+          </button>
+        </div>
+
+        <!-- Code Container -->
+        <div class="p-5 sm:p-6 relative bg-[#1E202E]">
+          <button
+            onclick="copyCurrentTabCode()"
+            class="absolute right-4 top-4 px-2.5 py-1 rounded bg-[#2B2D42] hover:bg-[#353852] border border-white/10 text-xs font-mono text-slate-300 hover:text-white transition-colors flex items-center gap-1.5"
+          >
+            <i data-lucide="copy" class="w-3.5 h-3.5"></i>
+            <span id="copyTabLabel">Copy</span>
+          </button>
+
+          <pre
+            id="quickCode"
+            class="font-mono text-xs text-slate-200 overflow-x-auto leading-relaxed pt-2"
+          ></pre>
+        </div>
+      </div>
+    </section>
+
+    <!-- FOOTER -->
+    <footer
+      class="relative z-10 border-t border-alabaster-border py-10 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto text-ink-muted text-xs"
+    >
+      <div class="flex flex-col sm:flex-row items-center justify-between gap-5">
+        <div class="flex items-center gap-2.5">
+          <div
+            class="w-6 h-6 rounded bg-terracotta flex items-center justify-center text-white"
+          >
+            <i data-lucide="shield-check" class="w-3.5 h-3.5"></i>
+          </div>
+          <span class="text-ink font-bold tracking-tight">AGENT MONITOR</span>
+          <span class="text-ink-faint">• Released under the MIT License</span>
+        </div>
+
+        <div class="flex items-center gap-6">
+          <a
+            href="https://github.com/ssarthaks/agent-monitor"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="hover:text-ink transition-colors flex items-center gap-1.5"
+          >
+            <svg
+              class="w-3.5 h-3.5 fill-current shrink-0"
+              viewBox="0 0 24 24"
+              aria-hidden="true"
+            >
+              <path
+                fill-rule="evenodd"
+                clip-rule="evenodd"
+                d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.53 1.032 1.53 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z"
+              />
+            </svg>
+            <span>GitHub Repository</span>
+          </a>
+          <a
+            href="https://www.npmjs.com/package/@agent-monitor/cli"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="hover:text-ink transition-colors flex items-center gap-1.5"
+          >
+            <i data-lucide="package" class="w-3.5 h-3.5"></i>
+            <span>npm Package</span>
+          </a>
+          <a
+            href="https://github.com/ssarthaks/agent-monitor/blob/main/docs/security.md"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="hover:text-ink transition-colors flex items-center gap-1.5"
+          >
+            <i data-lucide="file-text" class="w-3.5 h-3.5"></i>
+            <span>Security Invariants</span>
+          </a>
+        </div>
+      </div>
+    </footer>
+
+    <!-- SCRIPT: INTERACTIVE SIMULATOR & TABS -->
+    <script>
+      // Initialize Lucide icons
+      lucide.createIcons();
+
+      // Simulator presets
+      function setSimCommand(cmd, action, path) {
+        document.getElementById("simAction").value = action;
+        document.getElementById("simInput").value = cmd || path;
+        runSimulation();
+      }
+
+      // Interactive Policy Simulator Logic
+      function runSimulation() {
+        const action = document.getElementById("simAction").value;
+        const input = document.getElementById("simInput").value.trim();
+        const resultBox = document.getElementById("simResultBox");
+
+        let decision = "ALLOW";
+        let riskScore = 0;
+        let matchedRule = "default fallback";
+        let specificity = 0;
+        let reason =
+          "No specific policy matched. Applied default decision: ALLOW.";
+        let badgeColor = "emerald";
+
+        if (action === "process.exec") {
+          if (
+            /rm\s+(-rf|-fr|-r\s+-f|-f\s+-r)\s+(\/|~|\.\.)/i.test(input) ||
+            input === "rm -rf /"
+          ) {
+            decision = "DENY";
+            riskScore = 60;
+            matchedRule = "deny-destructive-rm-root";
+            specificity = 70;
+            reason = "Executing root system deletion is strictly blocked.";
+            badgeColor = "rose";
+          } else if (/git\s+push/i.test(input)) {
+            decision = "ASK";
+            riskScore = 15;
+            matchedRule = "ask-git-push";
+            specificity = 60;
+            reason =
+              "Pushing code to remote repositories requires explicit human confirmation.";
+            badgeColor = "amber";
+          } else if (
+            /npm\s+(i|install|add)/i.test(input) ||
+            /npx\s+/i.test(input)
+          ) {
+            decision = "ASK";
+            riskScore = 10;
+            matchedRule = "gate-dependency-install";
+            specificity = 50;
+            reason =
+              "Installing or executing external packages requires human approval.";
+            badgeColor = "amber";
+          } else if (
+            /curl.*\|\s*(ba|z)?sh/i.test(input) ||
+            /wget.*\|\s*(ba|z)?sh/i.test(input)
+          ) {
+            decision = "DENY";
+            riskScore = 80;
+            matchedRule = "deny-remote-code-exec";
+            specificity = 80;
+            reason =
+              "Piping remote network scripts directly into shell interpreter is strictly blocked.";
+            badgeColor = "rose";
+          }
+        } else if (action.startsWith("file.")) {
+          if (
+            input.includes("..") ||
+            input.startsWith("/") ||
+            input.includes("etc/passwd") ||
+            input.includes("etc/shadow")
+          ) {
+            decision = "DENY";
+            riskScore = 45;
+            matchedRule = "deny-outside-workspace";
+            specificity = 60;
+            reason =
+              "Path traversal outside designated workspace root is strictly contained.";
+            badgeColor = "rose";
+          } else if (input.includes(".env")) {
+            decision = "DENY";
+            riskScore = 50;
+            matchedRule = "protect-environment-files";
+            specificity = 50;
+            reason =
+              "Accessing or modifying secret environment variables is prohibited.";
+            badgeColor = "rose";
+          }
+        }
+
+        const colorClasses = {
+          emerald: {
+            bg: "bg-emerald-50/70",
+            border: "border-emerald-200",
+            badgeBg: "bg-emerald-100",
+            badgeText: "text-emerald-800",
+            icon: "check-circle-2",
+            iconColor: "text-emerald-700",
+          },
+          amber: {
+            bg: "bg-amber-50/70",
+            border: "border-amber-200",
+            badgeBg: "bg-amber-100",
+            badgeText: "text-amber-800",
+            icon: "alert-triangle",
+            iconColor: "text-amber-700",
+          },
+          rose: {
+            bg: "bg-rose-50/70",
+            border: "border-rose-200",
+            badgeBg: "bg-rose-100",
+            badgeText: "text-rose-800",
+            icon: "shield-alert",
+            iconColor: "text-rose-700",
+          },
+        }[badgeColor];
+
+        resultBox.className = `p-4 rounded-lg border ${colorClasses.bg} ${colorClasses.border} space-y-3 font-mono text-xs`;
+        resultBox.innerHTML = `
+        <div class="flex flex-wrap items-center justify-between gap-2 border-b border-black/5 pb-2.5">
+          <div class="flex items-center gap-2">
+            <i data-lucide="${colorClasses.icon}" class="w-4 h-4 ${colorClasses.iconColor}"></i>
+            <span class="text-ink-muted">Resolution:</span>
+            <span class="px-2 py-0.5 rounded text-[11px] font-bold tracking-wide uppercase ${colorClasses.badgeBg} ${colorClasses.badgeText}">
+              ${decision}
+            </span>
+          </div>
+          <div class="flex items-center gap-2 text-ink-muted text-[11px]">
+            <span>Risk Score: <strong class="text-ink">${riskScore}/100</strong></span>
+            <span>•</span>
+            <span>Specificity: <strong class="text-ink">${specificity}</strong></span>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px]">
+          <div>
+            <span class="text-ink-faint block">MATCHED RULE</span>
+            <span class="text-ink font-semibold">${matchedRule}</span>
+          </div>
+          <div>
+            <span class="text-ink-faint block">INVARIANT TRAVERSAL</span>
+            <span class="text-terracotta font-semibold">14 / 14 Stages Validated</span>
+          </div>
+        </div>
+
+        <div class="pt-2 border-t border-black/5 text-[11px] text-ink-muted">
+          <span class="font-semibold text-ink">Engine Rationale:</span> ${reason}
+        </div>
+      `;
+        lucide.createIcons();
+      }
+
+      // Tab switcher snippets
+      const tabSnippets = {
+        cli: `# 1. Bootstrap security configuration in any project
+npx @agent-monitor/cli config init
+
+# 2. Test command policies in dry-run mode
+npx @agent-monitor/cli check --command "git push origin main"
+
+# 3. Supervise an autonomous coding task with interactive approval
+npx @agent-monitor/cli run --task "Audit dependencies and update packages"
+
+# 4. Start the live Web Operations Dashboard
+npx @agent-monitor/cli server --port 4310`,
+
+        cursor: `// In Claude Desktop (claude_desktop_config.json) or Cursor MCP Settings:
+{
+  "mcpServers": {
+    "secure-filesystem": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@agent-monitor/cli",
+        "mcp",
+        "--command",
+        "npx -y @modelcontextprotocol/server-filesystem /path/to/project"
+      ]
+    }
+  }
+}
+// Every tools/call and resources/read now traverses the 14-stage control boundary.`,
+
+        sdk: `import { AgentInterceptor } from "@agent-monitor/agent";
+import { PolicyEngine } from "@agent-monitor/core";
+
+// Initialize universal boundary interceptor
+const interceptor = new AgentInterceptor({
+  sessionId: "session_prod_001",
+  workspaceRoot: process.cwd()
+});
+
+// Wrap any autonomous tool execution
+const result = await interceptor.invoke({
+  kind: "process.exec",
+  command: "npm test",
+  execute: async () => {
+    // Your raw execution here
+    return execAsync("npm test");
+  }
+});`,
+      };
+
+      let currentTab = "cli";
+
+      function setQuickTab(tab) {
+        currentTab = tab;
+        ["cli", "cursor", "sdk"].forEach((t) => {
+          const btn = document.getElementById(`tab-${t}`);
+          if (t === tab) {
+            btn.className =
+              "px-5 py-3 font-semibold border-b-2 border-terracotta text-ink bg-white transition-colors";
+          } else {
+            btn.className =
+              "px-5 py-3 font-medium border-b-2 border-transparent text-ink-muted hover:text-ink transition-colors";
+          }
+        });
+        document.getElementById("quickCode").textContent = tabSnippets[tab];
+      }
+
+      function copyCurrentTabCode() {
+        navigator.clipboard.writeText(tabSnippets[currentTab]);
+        const label = document.getElementById("copyTabLabel");
+        label.textContent = "Copied!";
+        setTimeout(() => (label.textContent = "Copy"), 2000);
+      }
+
+      function copyHeroCmd(btn) {
+        navigator.clipboard.writeText(
+          'npx @agent-monitor/cli check --command "git push origin main"',
+        );
+        const span = btn.querySelector("span");
+        span.textContent = "Copied!";
+        setTimeout(() => (span.textContent = "Copy"), 2000);
+      }
+
+      // Initial load
+      setQuickTab("cli");
+      runSimulation();
+    </script>
+  </body>
+</html>
