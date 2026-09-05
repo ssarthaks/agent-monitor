@@ -216,7 +216,7 @@ export class MonitorServer {
             status: dbHealth.status,
             database: dbHealth,
             timestamp: Date.now(),
-            version: "4.1.0",
+            version: "4.1.1",
           }),
         );
         return;

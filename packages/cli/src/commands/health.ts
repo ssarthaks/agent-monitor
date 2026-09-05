@@ -72,7 +72,7 @@ export async function runHealthCommand(
           server: serverHealth,
           workspace: workspaceRoot,
           timestamp: Date.now(),
-          version: "4.1.0",
+          version: "4.1.1",
         },
         null,
         2,
@@ -84,7 +84,7 @@ export async function runHealthCommand(
     return;
   }
 
-  console.log(pc.bold("\nAGENT MONITOR — Health Diagnostics (V4.1.0)\n"));
+  console.log(pc.bold("\nAGENT MONITOR — Health Diagnostics (V4.1.1)\n"));
   console.log(
     `  Overall Status:  ${
       overallStatus === "healthy"

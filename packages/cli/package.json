@@ -1,7 +1,7 @@
 {
   "name": "@agent-monitor/cli",
-  "version": "4.1.0",
-  "description": "CLI binary and orchestration runner for Agent Monitor (V4.1.0 Production Control Plane)",
+  "version": "4.1.1",
+  "description": "CLI binary and orchestration runner for Agent Monitor (V4.1.1 Production Control Plane)",
   "type": "module",
   "bin": {
     "agent-monitor": "./dist/index.js",
@@ -25,10 +25,10 @@
     "dev": "tsx src/index.ts"
   },
   "dependencies": {
-    "@agent-monitor/agent": "^4.1.0",
-    "@agent-monitor/core": "^4.1.0",
-    "@agent-monitor/gateway": "^4.1.0",
-    "@agent-monitor/server": "^4.1.0",
+    "@agent-monitor/agent": "^4.1.1",
+    "@agent-monitor/core": "^4.1.1",
+    "@agent-monitor/gateway": "^4.1.1",
+    "@agent-monitor/server": "^4.1.1",
     "commander": "^12.1.0",
     "picocolors": "^1.1.1"
   },

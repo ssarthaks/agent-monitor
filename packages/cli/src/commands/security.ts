@@ -82,7 +82,7 @@ export async function runSecurityFlowsCommand(
 
   console.log(
     pc.bold(
-      `\nAGENT MONITOR — Behavioral Data Flows & Security Sequences (V4.1.0)\n`,
+      `\nAGENT MONITOR — Behavioral Data Flows & Security Sequences (V4.1.1)\n`,
     ),
   );
 

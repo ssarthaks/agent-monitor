@@ -31,6 +31,7 @@ import {
   printLiveEvent,
   printSummaryBanner,
 } from "../banner.js";
+import { resolveDatabasePath } from "../storage.js";
 
 export interface RunCommandOptions {
   task: string;
@@ -84,14 +85,7 @@ export async function runAgentCommand(
   const workspaceRoot = path.resolve(options.workspace || process.cwd());
   loadEnvFiles(workspaceRoot);
 
-  const dbDir = path.join(workspaceRoot, ".agent-monitor");
-  if (!fs.existsSync(dbDir)) {
-    fs.mkdirSync(dbDir, { recursive: true });
-  }
-
-  const dbPath = options.db
-    ? path.resolve(options.db)
-    : path.join(dbDir, "data.db");
+  const dbPath = resolveDatabasePath(workspaceRoot, { db: options.db });
   const serverPort =
     options.port || Number(process.env.AGENT_MONITOR_PORT) || 4040;
   const webPort = options.webPort || Number(process.env.PORT) || 3000;

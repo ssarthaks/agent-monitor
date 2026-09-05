@@ -84,7 +84,7 @@ export async function runToolsCommand(
 
   console.log(
     pc.bold(
-      `\nAGENT MONITOR — External Tool Fingerprints & Integrity (V4.1.0)\n`,
+      `\nAGENT MONITOR — External Tool Fingerprints & Integrity (V4.1.1)\n`,
     ),
   );
 

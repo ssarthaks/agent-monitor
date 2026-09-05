@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import pc from "picocolors";
 import { PolicyEngine, PolicyConfig } from "@agent-monitor/core";
+import { ensureGitIgnore } from "../storage.js";
 
 export interface ConfigInitOptions {
   workspace?: string;
@@ -75,9 +76,13 @@ export async function runConfigInitCommand(
 
   const content = JSON.stringify(DEFAULT_CONFIG_TEMPLATE, null, 2) + "\n";
   fs.writeFileSync(targetPath, content, "utf8");
+  ensureGitIgnore(workspaceRoot);
 
   console.log(pc.bold(pc.green(`\n✓ Created agent-monitor.config.json`)));
-  console.log(`  Location: ${pc.cyan(targetPath)}\n`);
+  console.log(`  Location: ${pc.cyan(targetPath)}`);
+  console.log(
+    pc.dim(`  ✓ Ensured .agent-monitor/ is excluded in .gitignore\n`),
+  );
   console.log(pc.bold("Next steps:"));
   console.log(
     `  1. Review or customize policy rules in ${pc.white("agent-monitor.config.json")}`,

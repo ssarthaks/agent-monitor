@@ -81,7 +81,7 @@ export async function runStatusCommand(
           config: configInfo,
           database: dbInfo,
           server: serverInfo,
-          version: "4.1.0",
+          version: "4.1.1",
           timestamp: Date.now(),
         },
         null,
@@ -92,7 +92,7 @@ export async function runStatusCommand(
   }
 
   console.log(
-    pc.bold(`\nAGENT MONITOR — System & Workspace Status (V4.1.0)\n`),
+    pc.bold(`\nAGENT MONITOR — System & Workspace Status (V4.1.1)\n`),
   );
   console.log(`  ${pc.bold("Workspace:")}        ${pc.white(workspaceRoot)}`);
 

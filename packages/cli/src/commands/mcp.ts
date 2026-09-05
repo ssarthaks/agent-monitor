@@ -13,6 +13,7 @@ import {
   EventBus,
   MonitorServer,
 } from "@agent-monitor/server";
+import { resolveDatabasePath } from "../storage.js";
 import { ApprovalManager, EventSink } from "@agent-monitor/agent";
 import { McpStdioProxy } from "@agent-monitor/gateway";
 
@@ -49,14 +50,7 @@ export async function runMcpProxyCommand(
   const [cmd, ...cmdArgs] = args;
   const workspaceRoot = path.resolve(options.workspace || process.cwd());
 
-  const dbDir = path.join(workspaceRoot, ".agent-monitor");
-  if (!fs.existsSync(dbDir)) {
-    fs.mkdirSync(dbDir, { recursive: true });
-  }
-
-  const dbPath = options.db
-    ? path.resolve(options.db)
-    : path.join(dbDir, "data.db");
+  const dbPath = resolveDatabasePath(workspaceRoot, { db: options.db });
   const serverPort =
     options.port || Number(process.env.AGENT_MONITOR_PORT) || 4040;
 

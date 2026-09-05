@@ -45,9 +45,9 @@ const program = new Command();
 program
   .name("agent-monitor")
   .description(
-    "Agent Monitor — Production Control Plane & Security Operations for AI Agents (V4.1.0)",
+    "Agent Monitor — Production Control Plane & Security Operations for AI Agents (V4.1.1)",
   )
-  .version("4.1.0");
+  .version("4.1.1");
 
 // 1. Run Agent Task with Policy Monitoring
 program
