@@ -1,0 +1,5 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://agent-monitor.sarthaksharma.com.np/sitemap.xml
+
